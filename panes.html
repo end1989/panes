@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Panes</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        html, body {
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+            background: #000;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :fullscreen { width: 100vw !important; height: 100vh !important; }
+        :-webkit-full-screen { width: 100vw !important; height: 100vh !important; }
+        ::-webkit-scrollbar { display: none; }
+        body { -ms-overflow-style: none; scrollbar-width: none; }
+
+        #grid {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: grid;
+            gap: 0;
+        }
+
+        .cell {
+            position: relative;
+            background: #000;
+            overflow: hidden;
+        }
+
+        .cell iframe {
+            position: absolute;
+            border: none;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Gear button */
+        #gearBtn {
+            position: fixed;
+            bottom: 12px;
+            right: 12px;
+            width: 28px;
+            height: 28px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            opacity: 0.3;
+            transition: opacity 0.3s;
+            z-index: 100;
+            padding: 0;
+        }
+        #gearBtn:hover { opacity: 0.7; }
+        #gearBtn svg { width: 28px; height: 28px; fill: #fff; }
+
+        /* Panel */
+        #controlPanel {
+            position: fixed;
+            bottom: 50px;
+            right: 12px;
+            width: 340px;
+            max-height: calc(100vh - 70px);
+            background: rgba(0, 0, 0, 0.85);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 16px;
+            z-index: 99;
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(8px);
+            transition: opacity 0.2s, transform 0.2s;
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            display: flex;
+            flex-direction: column;
+        }
+        #controlPanel.open {
+            opacity: 1;
+            pointer-events: auto;
+            transform: translateY(0);
+        }
+
+        /* Grid size picker */
+        .grid-picker {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        .grid-picker label {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        .grid-picker .dim-group {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .dim-btn {
+            width: 22px;
+            height: 22px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: rgba(255, 255, 255, 0.7);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s;
+        }
+        .dim-btn:hover { background: rgba(255, 255, 255, 0.2); color: #fff; }
+        .dim-val {
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            width: 18px;
+            text-align: center;
+        }
+        .dim-x {
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 12px;
+            margin: 0 2px;
+        }
+        .cell-count {
+            color: rgba(255, 255, 255, 0.3);
+            font-size: 11px;
+            margin-left: auto;
+        }
+
+        /* URL list (scrollable) */
+        #urlList {
+            flex: 1;
+            overflow-y: auto;
+            min-height: 0;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.15) transparent;
+        }
+        #urlList::-webkit-scrollbar { display: block; width: 4px; }
+        #urlList::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+
+        .url-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+        .url-row label {
+            color: rgba(255, 255, 255, 0.35);
+            font-size: 11px;
+            font-weight: 600;
+            width: 18px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+        .url-row input {
+            flex: 1;
+            padding: 5px 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #fff;
+            border-radius: 5px;
+            font-size: 12px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .url-row input:focus { border-color: rgba(255, 255, 255, 0.3); }
+        .url-row input::placeholder { color: rgba(255, 255, 255, 0.2); }
+        .url-row button {
+            padding: 5px 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: rgba(255, 255, 255, 0.6);
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: background 0.15s;
+            flex-shrink: 0;
+        }
+        .url-row button:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
+
+        .panel-divider {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.08);
+            margin: 10px 0;
+            flex-shrink: 0;
+        }
+
+        /* Zoom slider */
+        .slider-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+        .slider-row label {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        .slider-row input[type="range"] {
+            flex: 1;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 2px;
+            outline: none;
+        }
+        .slider-row input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+        }
+        .slider-row input[type="range"]::-moz-range-thumb {
+            width: 14px; height: 14px;
+            border-radius: 50%;
+            background: #fff;
+            cursor: pointer;
+            border: none;
+        }
+        .slider-value {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 12px;
+            width: 36px;
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        #panelFsBtn {
+            width: 100%;
+            padding: 8px;
+            margin-top: 4px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: rgba(255, 255, 255, 0.6);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background 0.2s, color 0.2s;
+            flex-shrink: 0;
+        }
+        #panelFsBtn:hover { background: rgba(255, 255, 255, 0.15); color: #fff; }
+
+        body.cursor-hidden,
+        body.cursor-hidden * { cursor: none !important; }
+    </style>
+</head>
+<body>
+    <div id="grid"></div>
+
+    <button id="gearBtn" onclick="togglePanel()">
+        <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.48.48 0 00-.48-.41h-3.84a.48.48 0 00-.48.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87a.48.48 0 00.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z"/></svg>
+    </button>
+
+    <div id="controlPanel">
+        <!-- Grid size picker -->
+        <div class="grid-picker">
+            <label>Grid</label>
+            <div class="dim-group">
+                <button class="dim-btn" onclick="changeDim('cols', -1)">-</button>
+                <span class="dim-val" id="colsVal">2</span>
+                <button class="dim-btn" onclick="changeDim('cols', 1)">+</button>
+            </div>
+            <span class="dim-x">&times;</span>
+            <div class="dim-group">
+                <button class="dim-btn" onclick="changeDim('rows', -1)">-</button>
+                <span class="dim-val" id="rowsVal">2</span>
+                <button class="dim-btn" onclick="changeDim('rows', 1)">+</button>
+            </div>
+            <span class="cell-count" id="cellCount">4 cells</span>
+        </div>
+        <div class="panel-divider"></div>
+
+        <!-- Dynamic URL rows -->
+        <div id="urlList"></div>
+        <div class="panel-divider"></div>
+
+        <!-- Zoom -->
+        <div class="slider-row">
+            <label>Zoom</label>
+            <input type="range" id="zoomSlider" min="100" max="300" value="200" step="10">
+            <span class="slider-value" id="zoomValue">200%</span>
+        </div>
+        <div class="panel-divider"></div>
+
+        <button id="panelFsBtn" onclick="enterFullscreen()">Enter Fullscreen (F)</button>
+    </div>
+
+    <script>
+        let cols = 2, rows = 2;
+        let currentScale = 200;
+        let panelOpen = false;
+        let savedUrls = [];
+
+        function cellCount() { return cols * rows; }
+
+        // --- Build / rebuild ---
+
+        function buildGrid() {
+            const grid = document.getElementById('grid');
+            const count = cellCount();
+
+            // Collect current URLs before destroying DOM
+            savedUrls = collectUrls();
+
+            grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+            grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
+            grid.innerHTML = '';
+
+            for (let i = 0; i < count; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                const iframe = document.createElement('iframe');
+                iframe.id = `frame-${i}`;
+                iframe.style.display = 'none';
+                iframe.style.width = currentScale + '%';
+                iframe.style.height = currentScale + '%';
+                iframe.setAttribute('allow', 'autoplay; fullscreen; encrypted-media; picture-in-picture');
+                iframe.allowFullscreen = true;
+                cell.appendChild(iframe);
+                grid.appendChild(cell);
+            }
+
+            buildUrlRows();
+            restoreUrls();
+            saveState();
+        }
+
+        function buildUrlRows() {
+            const list = document.getElementById('urlList');
+            list.innerHTML = '';
+            const count = cellCount();
+
+            for (let i = 0; i < count; i++) {
+                const row = document.createElement('div');
+                row.className = 'url-row';
+                row.innerHTML = `<label>${i + 1}</label><input type="text" id="url-${i}" placeholder="Video URL"><button onclick="loadVideo(${i})">Go</button>`;
+                list.appendChild(row);
+
+                // Enter to load
+                row.querySelector('input').addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') loadVideo(i);
+                });
+            }
+
+            document.getElementById('colsVal').textContent = cols;
+            document.getElementById('rowsVal').textContent = rows;
+            document.getElementById('cellCount').textContent = count + (count === 1 ? ' cell' : ' cells');
+        }
+
+        function collectUrls() {
+            const urls = [];
+            const count = cellCount();
+            for (let i = 0; i < count; i++) {
+                const el = document.getElementById(`url-${i}`);
+                urls.push(el ? el.value : '');
+            }
+            return urls;
+        }
+
+        function restoreUrls() {
+            const count = cellCount();
+            for (let i = 0; i < count; i++) {
+                const el = document.getElementById(`url-${i}`);
+                if (el && savedUrls[i]) {
+                    el.value = savedUrls[i];
+                    // Reload iframe if it had a URL
+                    loadVideoSilent(i, savedUrls[i]);
+                }
+            }
+        }
+
+        // Load a video without re-saving (used during restore)
+        function loadVideoSilent(index, rawUrl) {
+            if (!rawUrl) return;
+            const frame = document.getElementById(`frame-${index}`);
+            if (!frame) return;
+            frame.src = toEmbedUrl(rawUrl);
+            frame.style.display = 'block';
+            frame.style.width = currentScale + '%';
+            frame.style.height = currentScale + '%';
+        }
+
+        // --- Grid size ---
+
+        function changeDim(dim, delta) {
+            if (dim === 'cols') {
+                cols = Math.max(1, Math.min(6, cols + delta));
+            } else {
+                rows = Math.max(1, Math.min(6, rows + delta));
+            }
+            buildGrid();
+        }
+
+        // --- Panel ---
+
+        function togglePanel(forceOpen) {
+            panelOpen = forceOpen === true ? true : !panelOpen;
+            document.getElementById('controlPanel').classList.toggle('open', panelOpen);
+        }
+
+        // --- Fullscreen ---
+
+        function enterFullscreen() {
+            const elem = document.documentElement;
+            if (document.fullscreenElement) {
+                document.exitFullscreen();
+            } else if (elem.requestFullscreen) {
+                elem.requestFullscreen();
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen();
+            } else if (elem.msRequestFullscreen) {
+                elem.msRequestFullscreen();
+            }
+        }
+
+        // --- URL conversion ---
+
+        function toEmbedUrl(raw) {
+            let url = raw.startsWith('http') ? raw : 'https://' + raw;
+            let m;
+
+            if ((m = url.match(/youtube\.com\/watch\?.*v=([^&]+)/)))
+                return `https://www.youtube.com/embed/${m[1]}?autoplay=1`;
+            if ((m = url.match(/youtu\.be\/([^?&]+)/)))
+                return `https://www.youtube.com/embed/${m[1]}?autoplay=1`;
+            if ((m = url.match(/youtube\.com\/shorts\/([^?&]+)/)))
+                return `https://www.youtube.com/embed/${m[1]}?autoplay=1`;
+            if ((m = url.match(/youtube\.com\/live\/([^?&]+)/)))
+                return `https://www.youtube.com/embed/${m[1]}?autoplay=1`;
+
+            if ((m = url.match(/twitch\.tv\/videos\/(\d+)/)))
+                return `https://player.twitch.tv/?video=${m[1]}&parent=${location.hostname || 'localhost'}&autoplay=true`;
+            if ((m = url.match(/twitch\.tv\/([^/?]+)$/)))
+                return `https://player.twitch.tv/?channel=${m[1]}&parent=${location.hostname || 'localhost'}&autoplay=true`;
+
+            if ((m = url.match(/vimeo\.com\/(\d+)/)))
+                return `https://player.vimeo.com/video/${m[1]}?autoplay=1`;
+
+            if ((m = url.match(/dailymotion\.com\/video\/([^_?]+)/)))
+                return `https://www.dailymotion.com/embed/video/${m[1]}?autoplay=1`;
+
+            if ((m = url.match(/kick\.com\/([^/?]+)$/)))
+                return `https://player.kick.com/${m[1]}`;
+
+            return url;
+        }
+
+        // --- Load video ---
+
+        function loadVideo(index) {
+            const el = document.getElementById(`url-${index}`);
+            const url = el ? el.value.trim() : '';
+            if (!url) return;
+
+            const frame = document.getElementById(`frame-${index}`);
+            frame.src = toEmbedUrl(url);
+            frame.style.display = 'block';
+            frame.style.width = currentScale + '%';
+            frame.style.height = currentScale + '%';
+            saveState();
+        }
+
+        // --- Zoom ---
+
+        function setZoom(value) {
+            currentScale = value;
+            document.getElementById('zoomValue').textContent = value + '%';
+            const count = cellCount();
+            for (let i = 0; i < count; i++) {
+                const frame = document.getElementById(`frame-${i}`);
+                if (frame) {
+                    frame.style.width = value + '%';
+                    frame.style.height = value + '%';
+                }
+            }
+        }
+
+        document.getElementById('zoomSlider').addEventListener('input', (e) => {
+            setZoom(parseInt(e.target.value));
+        });
+
+        // --- Persistence ---
+
+        function saveState() {
+            const urls = collectUrls();
+            localStorage.setItem('borderlessGrid', JSON.stringify({ cols, rows, urls, zoom: currentScale }));
+        }
+
+        function loadState() {
+            try {
+                const data = JSON.parse(localStorage.getItem('borderlessGrid'));
+                if (data) {
+                    cols = Math.max(1, Math.min(6, data.cols || 2));
+                    rows = Math.max(1, Math.min(6, data.rows || 2));
+                    savedUrls = data.urls || [];
+                    currentScale = data.zoom || 200;
+                    document.getElementById('zoomSlider').value = currentScale;
+                    document.getElementById('zoomValue').textContent = currentScale + '%';
+                }
+            } catch (e) {}
+        }
+
+        // --- Keyboard ---
+
+        document.addEventListener('keydown', (e) => {
+            if (e.target.tagName === 'INPUT') {
+                if (e.key === 'Escape') {
+                    e.target.blur();
+                    panelOpen = false;
+                    document.getElementById('controlPanel').classList.remove('open');
+                }
+                return;
+            }
+
+            switch (e.key) {
+                case 'f': case 'F':
+                    enterFullscreen();
+                    break;
+                case 'm': case 'M':
+                    togglePanel();
+                    break;
+                case 'Escape':
+                    if (panelOpen) {
+                        panelOpen = false;
+                        document.getElementById('controlPanel').classList.remove('open');
+                    }
+                    break;
+                default:
+                    // 1-9 focus URL fields
+                    const n = parseInt(e.key);
+                    if (n >= 1 && n <= 9 && n <= cellCount()) {
+                        if (!panelOpen) togglePanel(true);
+                        const el = document.getElementById(`url-${n - 1}`);
+                        if (el) el.focus();
+                    }
+            }
+        });
+
+        // Fullscreen button text
+        document.addEventListener('fullscreenchange', () => {
+            document.getElementById('panelFsBtn').textContent = document.fullscreenElement
+                ? 'Exit Fullscreen (F)' : 'Enter Fullscreen (F)';
+        });
+
+        // Auto-hide cursor + gear
+        let cursorTimeout;
+        const gearBtn = document.getElementById('gearBtn');
+        document.addEventListener('mousemove', () => {
+            document.body.classList.remove('cursor-hidden');
+            gearBtn.style.opacity = '';
+            clearTimeout(cursorTimeout);
+            cursorTimeout = setTimeout(() => {
+                if (!panelOpen) {
+                    document.body.classList.add('cursor-hidden');
+                    gearBtn.style.opacity = '0';
+                }
+            }, 3000);
+        });
+
+        // --- Init ---
+        loadState();
+        buildGrid();
+        setTimeout(() => togglePanel(true), 400);
+    </script>
+</body>
+</html>
