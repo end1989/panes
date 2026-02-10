@@ -242,6 +242,98 @@
             flex-shrink: 0;
         }
 
+        /* Presets */
+        .presets-header {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .presets-header label {
+            color: rgba(255, 255, 255, 0.5);
+            font-size: 12px;
+        }
+        .presets-header input {
+            flex: 1;
+            padding: 4px 8px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #fff;
+            border-radius: 5px;
+            font-size: 11px;
+            outline: none;
+        }
+        .presets-header input::placeholder { color: rgba(255, 255, 255, 0.2); }
+        .presets-header input:focus { border-color: rgba(255, 255, 255, 0.3); }
+        .save-btn {
+            padding: 4px 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: rgba(255, 255, 255, 0.6);
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 11px;
+            transition: background 0.15s;
+            flex-shrink: 0;
+        }
+        .save-btn:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
+        #presetsList {
+            max-height: 90px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(255,255,255,0.15) transparent;
+        }
+        #presetsList::-webkit-scrollbar { display: block; width: 4px; }
+        #presetsList::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 2px; }
+        .preset-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+        .preset-item button.preset-load {
+            flex: 1;
+            padding: 4px 8px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: rgba(255, 255, 255, 0.6);
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 11px;
+            text-align: left;
+            transition: background 0.15s;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .preset-item button.preset-load:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
+        .preset-item .preset-meta {
+            color: rgba(255, 255, 255, 0.25);
+            font-size: 10px;
+            flex-shrink: 0;
+        }
+        .preset-item button.preset-del {
+            width: 18px;
+            height: 18px;
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.2);
+            cursor: pointer;
+            font-size: 12px;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: color 0.15s;
+        }
+        .preset-item button.preset-del:hover { color: rgba(255, 100, 100, 0.8); }
+        .presets-empty {
+            color: rgba(255, 255, 255, 0.2);
+            font-size: 11px;
+            font-style: italic;
+        }
+
         #panelFsBtn {
             width: 100%;
             padding: 8px;
@@ -289,6 +381,15 @@
 
         <!-- Dynamic URL rows -->
         <div id="urlList"></div>
+        <div class="panel-divider"></div>
+
+        <!-- Presets -->
+        <div class="presets-header">
+            <label>Presets</label>
+            <input type="text" id="presetName" placeholder="Name this setup...">
+            <button class="save-btn" onclick="savePreset()">Save</button>
+        </div>
+        <div id="presetsList"></div>
         <div class="panel-divider"></div>
 
         <!-- Zoom -->
@@ -517,6 +618,81 @@
             } catch (e) {}
         }
 
+        // --- Presets ---
+
+        function getPresets() {
+            try { return JSON.parse(localStorage.getItem('panesPresets')) || []; }
+            catch (e) { return []; }
+        }
+
+        function savePresets(presets) {
+            localStorage.setItem('panesPresets', JSON.stringify(presets));
+        }
+
+        function savePreset() {
+            const nameEl = document.getElementById('presetName');
+            const name = nameEl.value.trim();
+            if (!name) { nameEl.focus(); return; }
+
+            const presets = getPresets();
+            presets.push({
+                name,
+                cols,
+                rows,
+                urls: collectUrls(),
+                zoom: currentScale
+            });
+            savePresets(presets);
+            nameEl.value = '';
+            renderPresets();
+        }
+
+        function loadPreset(index) {
+            const presets = getPresets();
+            const p = presets[index];
+            if (!p) return;
+
+            cols = Math.max(1, Math.min(6, p.cols || 2));
+            rows = Math.max(1, Math.min(6, p.rows || 2));
+            currentScale = p.zoom || 200;
+            savedUrls = p.urls || [];
+
+            document.getElementById('zoomSlider').value = currentScale;
+            document.getElementById('zoomValue').textContent = currentScale + '%';
+            buildGrid();
+        }
+
+        function deletePreset(index) {
+            const presets = getPresets();
+            presets.splice(index, 1);
+            savePresets(presets);
+            renderPresets();
+        }
+
+        function renderPresets() {
+            const list = document.getElementById('presetsList');
+            const presets = getPresets();
+
+            if (presets.length === 0) {
+                list.innerHTML = '<div class="presets-empty">No saved presets</div>';
+                return;
+            }
+
+            list.innerHTML = '';
+            presets.forEach((p, i) => {
+                const item = document.createElement('div');
+                item.className = 'preset-item';
+                const urlCount = (p.urls || []).filter(u => u).length;
+                item.innerHTML = `<button class="preset-load" onclick="loadPreset(${i})" title="${p.name}">${p.name}</button><span class="preset-meta">${p.cols}x${p.rows}</span><button class="preset-del" onclick="deletePreset(${i})" title="Delete">&times;</button>`;
+                list.appendChild(item);
+            });
+        }
+
+        // Enter key in preset name input
+        document.getElementById('presetName').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') savePreset();
+        });
+
         // --- Keyboard ---
 
         document.addEventListener('keydown', (e) => {
@@ -577,6 +753,7 @@
         // --- Init ---
         loadState();
         buildGrid();
+        renderPresets();
         setTimeout(() => togglePanel(true), 400);
     </script>
 </body>
