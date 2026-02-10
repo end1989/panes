@@ -437,13 +437,13 @@
             let m;
 
             if ((m = url.match(/youtube\.com\/watch\?.*v=([^&]+)/)))
-                return `https://www.youtube.com/embed/${m[1]}?autoplay=1`;
+                return `https://www.youtube-nocookie.com/embed/${m[1]}?autoplay=1`;
             if ((m = url.match(/youtu\.be\/([^?&]+)/)))
-                return `https://www.youtube.com/embed/${m[1]}?autoplay=1`;
+                return `https://www.youtube-nocookie.com/embed/${m[1]}?autoplay=1`;
             if ((m = url.match(/youtube\.com\/shorts\/([^?&]+)/)))
-                return `https://www.youtube.com/embed/${m[1]}?autoplay=1`;
+                return `https://www.youtube-nocookie.com/embed/${m[1]}?autoplay=1`;
             if ((m = url.match(/youtube\.com\/live\/([^?&]+)/)))
-                return `https://www.youtube.com/embed/${m[1]}?autoplay=1`;
+                return `https://www.youtube-nocookie.com/embed/${m[1]}?autoplay=1`;
 
             if ((m = url.match(/twitch\.tv\/videos\/(\d+)/)))
                 return `https://player.twitch.tv/?video=${m[1]}&parent=${location.hostname || 'localhost'}&autoplay=true`;
