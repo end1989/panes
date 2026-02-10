@@ -6,11 +6,11 @@ Paste YouTube, Twitch, Vimeo, or Kick links and they just work. Resize the grid 
 
 ## Quick Start
 
-**Option A** — Open `panes.html` in your browser. Press F11.
+**Use it now** — **[end1989.github.io/panes](https://end1989.github.io/panes/)** (works with YouTube, Twitch, everything)
 
-**Option B** — Double-click `launch.bat` and pick a mode.
+**Or run locally** — Open `index.html` in your browser, or double-click `launch.bat`.
 
-**Option C** — Host it anywhere. It's a single static HTML file. Works on GitHub Pages.
+> **Note:** YouTube and some other embeds require HTTPS, so they won't work from a local `file://` path. Use the online version or `panes_online.bat` for those.
 
 ## Features
 
@@ -51,6 +51,7 @@ Any URL that supports iframe embedding will work — these are just the ones wit
 | `launch.bat` option 2 | Chrome App Mode — no tabs, no address bar. |
 | `launch.bat` option 3 | Chrome Kiosk — true fullscreen, zero UI. Exit with Alt+F4. |
 | `quick_launch.bat` | Straight to Chrome App Mode. |
+| `panes_online.bat` | Opens the hosted version (YouTube/Twitch compatible). |
 
 ## License
 

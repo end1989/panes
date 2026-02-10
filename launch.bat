@@ -25,20 +25,20 @@ cd /d "%~dp0"
 if "%choice%"=="1" (
     echo.
     echo  Opening... press F11 for fullscreen
-    start panes.html
+    start index.html
 )
 
 if "%choice%"=="2" (
     echo.
     echo  Opening in App Mode...
-    start chrome.exe --app="file:///%cd%/panes.html" --window-size=1920,1080
+    start chrome.exe --app="file:///%cd%/index.html" --window-size=1920,1080
 )
 
 if "%choice%"=="3" (
     echo.
     echo  Opening in Kiosk Mode...
     timeout /t 2 >nul
-    start chrome.exe --kiosk "file:///%cd%/panes.html"
+    start chrome.exe --kiosk "file:///%cd%/index.html"
 )
 
 echo.
