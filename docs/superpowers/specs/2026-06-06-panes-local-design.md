@@ -76,21 +76,23 @@ Single source of truth across all panes.
 public record VideoItem(string FilePath, string DisplayName, long FileSize);
 
 public class SharedQueue {
-    ObservableCollection<VideoItem> Items;   // upcoming, in order
-    HashSet<string> InFlight;                // paths currently playing on a pane
-    HashSet<string> Played;                  // paths that finished naturally
+    ObservableCollection<VideoItem> Items;        // upcoming, in order
+    HashSet<string> InFlight;                     // paths currently playing on a pane
+    Dictionary<string, VideoItem> Played;         // finished paths → original VideoItem
 
-    VideoItem? TakeNext();                   // pops from Items, adds to InFlight
-    void Reinsert(VideoItem item, int position);
+    VideoItem? TakeNext();                        // pops from Items, adds to InFlight
+    void Reinsert(VideoItem item, int position);  // also dedupes if already in Items
     void Remove(VideoItem item);
     void MoveToTop(VideoItem item);
     void MoveUp(VideoItem item);
     void MoveDown(VideoItem item);
-    void Shuffle();                          // shuffles Items
-    void Reshuffle();                        // alias — explicit action button
-    void OnFinished(string path);            // InFlight → Played; refill if needed
+    void Shuffle();                               // shuffles Items
+    void Reshuffle();                             // alias — explicit action button
+    void OnFinished(string path);                 // InFlight → Played; refill if needed
 }
 ```
+
+`Played` is keyed by file path (preserving "every path in at most one collection at any moment") and holds the original `VideoItem` so refill-from-played retains the original metadata (FileSize, DisplayName) rather than reconstructing impoverished records.
 
 **Invariants:**
 - Every path is in exactly one of `{Items, InFlight, Played}` at any moment. This is what gives us "no duplicates" for free.
