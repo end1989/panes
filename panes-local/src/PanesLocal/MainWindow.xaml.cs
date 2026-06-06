@@ -25,6 +25,9 @@ public partial class MainWindow : Window
     private int _cols = 2, _rows = 2, _zoom = 100;
     private bool _shuffleOn = true, _repeatAllOn = true;
     private const double PanelWidth = 320;
+    private DockSide _dock = DockSide.Right;
+    private bool _draggingPanel;
+    private Point _dragStartPos;
 
     public MainWindow()
     {
@@ -62,6 +65,23 @@ public partial class MainWindow : Window
         Panel.ReshuffleClicked += () => _queue.Reshuffle();
         Panel.PaneDroppedOnPlaylist += OnPaneDroppedOnPlaylist;
 
+        Panel.Handle.MouseLeftButtonDown += (_, e) =>
+        {
+            _draggingPanel = true;
+            _dragStartPos = e.GetPosition(this);
+            Panel.Handle.CaptureMouse();
+        };
+        Panel.Handle.MouseMove += (_, _) => { /* live-detach effect could go here */ };
+        Panel.Handle.MouseLeftButtonUp += (_, e) =>
+        {
+            if (!_draggingPanel) return;
+            _draggingPanel = false;
+            Panel.Handle.ReleaseMouseCapture();
+            var p = e.GetPosition(this);
+            var newDock = ResolveDockFromPosition(p);
+            ApplyDock(newDock);
+        };
+
         BuildGrid();
         ClosePanelInstant();
     }
@@ -71,12 +91,16 @@ public partial class MainWindow : Window
         _lastMouseMove = DateTime.Now;
         Cursor = Cursors.Arrow;
         var p = e.GetPosition(this);
-
-        // Show chevron when cursor is within 24px of the right edge
-        if (ActualWidth - p.X < 24 && !_panelOpen)
-            OpenChevron.Opacity = 0.7;
-        else if (!IsMouseOver(OpenChevron, e))
-            OpenChevron.Opacity = 0.25;
+        bool nearEdge = _dock switch
+        {
+            DockSide.Right  => ActualWidth - p.X < 24,
+            DockSide.Left   => p.X < 24,
+            DockSide.Top    => p.Y < 24,
+            DockSide.Bottom => ActualHeight - p.Y < 24,
+            _ => false
+        };
+        if (nearEdge && !_panelOpen) OpenChevron.Opacity = 0.7;
+        else if (!IsMouseOver(OpenChevron, e)) OpenChevron.Opacity = 0.25;
     }
 
     private bool IsMouseOver(UIElement el, MouseEventArgs e)
@@ -98,7 +122,7 @@ public partial class MainWindow : Window
     {
         _panelOpen = true;
         OpenChevron.Visibility = Visibility.Collapsed;
-        AnimatePanel(targetX: 0);
+        AnimatePanel(0);
     }
 
     private void ClosePanel()
@@ -107,7 +131,14 @@ public partial class MainWindow : Window
         _panelAnchored = false;
         _mouseLeftPanelAt = DateTime.MaxValue;
         OpenChevron.Visibility = Visibility.Visible;
-        AnimatePanel(targetX: PanelWidth);
+        AnimatePanel(_dock switch
+        {
+            DockSide.Right  =>  PanelWidth,
+            DockSide.Left   => -PanelWidth,
+            DockSide.Bottom =>  PanelWidth,
+            DockSide.Top    => -PanelWidth,
+            _ => PanelWidth
+        });
     }
 
     private void ClosePanelInstant()
@@ -117,13 +148,83 @@ public partial class MainWindow : Window
         OpenChevron.Visibility = Visibility.Visible;
     }
 
-    private void AnimatePanel(double targetX)
+    private void AnimatePanel(double target)
     {
-        var anim = new DoubleAnimation(targetX, TimeSpan.FromMilliseconds(200))
+        var prop = (_dock is DockSide.Left or DockSide.Right)
+            ? TranslateTransform.XProperty
+            : TranslateTransform.YProperty;
+        var anim = new DoubleAnimation(target, TimeSpan.FromMilliseconds(200))
         {
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
         };
-        PanelTransform.BeginAnimation(TranslateTransform.XProperty, anim);
+        PanelTransform.BeginAnimation(prop, anim);
+    }
+
+    private DockSide ResolveDockFromPosition(Point p)
+    {
+        const double edge = 80;
+        if (p.X < edge) return DockSide.Left;
+        if (ActualWidth - p.X < edge) return DockSide.Right;
+        if (p.Y < edge) return DockSide.Top;
+        if (ActualHeight - p.Y < edge) return DockSide.Bottom;
+        return _dock;  // no edge in range → snap back to previous side
+    }
+
+    private void ApplyDock(DockSide dock)
+    {
+        _dock = dock;
+        PanelHost.HorizontalAlignment = dock switch
+        {
+            DockSide.Left  => HorizontalAlignment.Left,
+            DockSide.Right => HorizontalAlignment.Right,
+            _ => HorizontalAlignment.Stretch
+        };
+        PanelHost.VerticalAlignment = dock switch
+        {
+            DockSide.Top    => VerticalAlignment.Top,
+            DockSide.Bottom => VerticalAlignment.Bottom,
+            _ => VerticalAlignment.Stretch
+        };
+        Panel.Width  = (dock is DockSide.Left  or DockSide.Right)  ? PanelWidth : double.NaN;
+        Panel.Height = (dock is DockSide.Top   or DockSide.Bottom) ? PanelWidth : double.NaN;
+
+        // Re-orient chevron
+        OpenChevron.HorizontalAlignment = dock switch
+        {
+            DockSide.Left  => HorizontalAlignment.Left,
+            DockSide.Right => HorizontalAlignment.Right,
+            _ => HorizontalAlignment.Center
+        };
+        OpenChevron.VerticalAlignment = dock switch
+        {
+            DockSide.Top    => VerticalAlignment.Top,
+            DockSide.Bottom => VerticalAlignment.Bottom,
+            _ => VerticalAlignment.Center
+        };
+        ChevronText.Text = dock switch
+        {
+            DockSide.Left  => "›",
+            DockSide.Right => "‹",
+            DockSide.Top   => "˅",
+            DockSide.Bottom => "˄",
+            _ => "‹"
+        };
+
+        // Reset transform — close instantly in new dock
+        PanelTransform.X = dock switch
+        {
+            DockSide.Right => PanelWidth,
+            DockSide.Left  => -PanelWidth,
+            _ => 0
+        };
+        PanelTransform.Y = dock switch
+        {
+            DockSide.Bottom => PanelWidth,
+            DockSide.Top    => -PanelWidth,
+            _ => 0
+        };
+        _panelOpen = false;
+        OpenChevron.Visibility = Visibility.Visible;
     }
 
     private void OpenChevron_MouseEnter(object s, MouseEventArgs e) => OpenChevron.Opacity = 0.7;

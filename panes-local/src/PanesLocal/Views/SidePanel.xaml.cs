@@ -30,6 +30,8 @@ public partial class SidePanel : UserControl
         WireDragHandlers();
     }
 
+    public UIElement Handle => DragHandle;
+
     public void Attach(SharedQueue queue, AudioCoordinator audio)
     {
         Queue = queue;
