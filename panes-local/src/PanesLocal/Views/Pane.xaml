@@ -6,7 +6,7 @@
              AllowDrop="True"
              ClipToBounds="True">
     <Grid>
-        <vlc:VideoView x:Name="VlcView" />
+        <vlc:VideoView x:Name="VlcView" Visibility="Collapsed" />
 
         <Grid x:Name="HoverOverlay"
               VerticalAlignment="Top"

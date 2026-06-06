@@ -102,6 +102,7 @@ public partial class Pane : UserControl, IDisposable
         if (_player is null) return;
         Current = item;
         EmptyHint.Visibility = Visibility.Collapsed;
+        VlcView.Visibility = Visibility.Visible;
         using var media = new Media(App.LibVLC, item.FilePath, FromType.FromPath);
         _player.Play(media);
         if (seekSeconds is double s && s > 0)
@@ -115,6 +116,7 @@ public partial class Pane : UserControl, IDisposable
         if (Current is not null) VideoFinished?.Invoke(this, Current);
         _player.Stop();
         Current = null;
+        VlcView.Visibility = Visibility.Collapsed;
         EmptyHint.Visibility = Visibility.Visible;
     }
 

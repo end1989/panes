@@ -118,6 +118,10 @@ public partial class MainWindow : Window
         BuildGrid();
         ClosePanelInstant();
 
+        // First launch (no folder yet) → open the panel so the user can see the controls
+        if (_state.Folders.Count == 0)
+            Loaded += (_, _) => OpenPanel();
+
         if (_persistence.LastLoadWasFallback)
             MessageBox.Show("Could not restore last session — starting fresh.", "Panes Local",
                 MessageBoxButton.OK, MessageBoxImage.Information);
