@@ -4,9 +4,10 @@
              xmlns:vlc="clr-namespace:LibVLCSharp.WPF;assembly=LibVLCSharp.WPF"
              Background="#000000"
              AllowDrop="True"
-             ClipToBounds="True">
+             ClipToBounds="True"
+             Focusable="False">
     <Grid>
-        <vlc:VideoView x:Name="VlcView" Visibility="Collapsed" />
+        <vlc:VideoView x:Name="VlcView" Visibility="Collapsed" Focusable="False" IsHitTestVisible="False" />
 
         <Grid x:Name="HoverOverlay"
               VerticalAlignment="Top"

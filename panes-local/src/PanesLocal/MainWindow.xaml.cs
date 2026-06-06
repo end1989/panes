@@ -239,6 +239,8 @@ public partial class MainWindow : Window
     {
         _panelOpen = true;
         OpenChevron.Visibility = Visibility.Collapsed;
+        ApplyPaneGridInset(open: true);
+        Focus();
         AnimatePanel(0);
     }
 
@@ -248,6 +250,8 @@ public partial class MainWindow : Window
         _panelAnchored = false;
         _mouseLeftPanelAt = DateTime.MaxValue;
         OpenChevron.Visibility = Visibility.Visible;
+        ApplyPaneGridInset(open: false);
+        Focus();
         AnimatePanel(_dock switch
         {
             DockSide.Right  =>  PanelWidth,
@@ -263,6 +267,24 @@ public partial class MainWindow : Window
         _panelOpen = false;
         PanelTransform.X = PanelWidth;
         OpenChevron.Visibility = Visibility.Visible;
+        ApplyPaneGridInset(open: false);
+    }
+
+    // Shrink the video grid to leave airspace for the panel.
+    // libVLC's VideoView uses an HwndHost (native Win32 child window) which
+    // always overdraws WPF content, so we can't just float the panel on top
+    // of videos — we have to physically vacate the panel's space.
+    private void ApplyPaneGridInset(bool open)
+    {
+        if (!open) { PaneGrid.Margin = new Thickness(0); return; }
+        PaneGrid.Margin = _dock switch
+        {
+            DockSide.Right  => new Thickness(0, 0, PanelWidth, 0),
+            DockSide.Left   => new Thickness(PanelWidth, 0, 0, 0),
+            DockSide.Top    => new Thickness(0, PanelWidth, 0, 0),
+            DockSide.Bottom => new Thickness(0, 0, 0, PanelWidth),
+            _ => new Thickness(0)
+        };
     }
 
     private void AnimatePanel(double target)
