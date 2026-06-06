@@ -30,5 +30,13 @@
                 BorderBrush="#FF4FC3F7"
                 BorderThickness="3"
                 Visibility="Collapsed"/>
+
+        <TextBlock x:Name="EmptyHint"
+                   Text="(queue empty)"
+                   Foreground="#666666"
+                   FontSize="14"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Visibility="Collapsed"/>
     </Grid>
 </UserControl>
