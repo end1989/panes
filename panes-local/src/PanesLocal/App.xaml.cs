@@ -16,7 +16,13 @@ public partial class App : Application
         try
         {
             Core.Initialize();
-            LibVLC = new LibVLC("--no-osd", "--quiet", "--no-video-title-show");
+            // --avcodec-hw=none forces software decoding to avoid hardware-decode
+            // contention between multiple simultaneous panes (was causing freezes).
+            LibVLC = new LibVLC(
+                "--no-osd",
+                "--quiet",
+                "--no-video-title-show",
+                "--avcodec-hw=none");
         }
         catch (Exception ex)
         {

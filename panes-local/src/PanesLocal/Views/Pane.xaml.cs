@@ -103,10 +103,22 @@ public partial class Pane : UserControl, IDisposable
         Current = item;
         EmptyHint.Visibility = Visibility.Collapsed;
         VlcView.Visibility = Visibility.Visible;
-        using var media = new Media(App.LibVLC, item.FilePath, FromType.FromPath);
-        _player.Play(media);
-        if (seekSeconds is double s && s > 0)
-            _player.Time = (long)(s * 1000);
+        try
+        {
+            using var media = new Media(App.LibVLC, item.FilePath, FromType.FromPath);
+            _player.Play(media);
+            if (seekSeconds is double s && s > 0)
+                _player.Time = (long)(s * 1000);
+        }
+        catch
+        {
+            // libVLC threw — drop this video and ask for another
+            Current = null;
+            VlcView.Visibility = Visibility.Collapsed;
+            EmptyHint.Visibility = Visibility.Visible;
+            Dispatcher.BeginInvoke(() => RequestNext?.Invoke(this));
+            return;
+        }
         VideoStarted?.Invoke(this, item);
     }
 
@@ -122,7 +134,7 @@ public partial class Pane : UserControl, IDisposable
 
     private void OnEndReached(object? sender, EventArgs e)
     {
-        Dispatcher.Invoke(() =>
+        Dispatcher.BeginInvoke(() =>
         {
             if (Current is not null) _queue?.OnFinished(Current.FilePath);
             RequestNext?.Invoke(this);
@@ -131,7 +143,7 @@ public partial class Pane : UserControl, IDisposable
 
     private void OnError(object? sender, EventArgs e)
     {
-        Dispatcher.Invoke(() =>
+        Dispatcher.BeginInvoke(() =>
         {
             if (Current is not null) _queue?.OnFinished(Current.FilePath);
             RequestNext?.Invoke(this);

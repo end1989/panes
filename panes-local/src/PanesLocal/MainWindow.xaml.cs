@@ -396,12 +396,13 @@ public partial class MainWindow : Window
 
     private void ApplyZoom()
     {
-        var scale = _zoom / 100.0;
-        foreach (var pane in _panes)
-            pane.RenderTransform = new ScaleTransform(scale, scale, 0.5, 0.5);
+        // WPF RenderTransform doesn't affect HwndHost (native Win32 child window
+        // used by LibVLCSharp's VideoView), so a ScaleTransform here makes the
+        // pane chrome and the video go out of sync and one pane can appear to
+        // detach visually. Disabled until we wire libVLC's native crop instead.
     }
 
-    private void FillIdlePanesFromQueue()
+    private async void FillIdlePanesFromQueue()
     {
         foreach (var p in _panes)
         {
@@ -409,6 +410,9 @@ public partial class MainWindow : Window
             var next = _queue.TakeNext();
             if (next is null) break;
             p.Play(next);
+            // Stagger Plays so libVLC/HwndHost can initialize each player
+            // before the next one starts — avoids concurrent-init deadlocks.
+            await Task.Delay(150);
         }
     }
 
