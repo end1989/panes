@@ -219,7 +219,7 @@ public partial class MainWindow : Window
             _queue.Reinsert(targetPane.Current, int.MaxValue);
         // Pull the dropped item out of queue and play it
         _queue.Remove(item);
-        _queue.InFlight.Add(item.FilePath);
+        _queue.MarkInFlight(item);
         targetPane.Play(item);
     }
 

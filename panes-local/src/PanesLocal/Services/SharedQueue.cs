@@ -114,6 +114,13 @@ public class SharedQueue
         NotifyChanged();
     }
 
+    public void MarkInFlight(VideoItem item)
+    {
+        InFlight.Add(item.FilePath);
+        _inFlightItems[item.FilePath] = item;
+        NotifyChanged();
+    }
+
     public void Clear()
     {
         Items.Clear();

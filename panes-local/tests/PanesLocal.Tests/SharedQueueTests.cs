@@ -209,4 +209,19 @@ public class SharedQueueTests
         q.Items.Should().HaveCount(2);
         q.Items.Select(i => i.FilePath).Should().BeEquivalentTo(new[] { "a.mp4", "b.mp4" });
     }
+
+    [Fact]
+    public void MarkInFlight_RecordsItemSoOnFinishedPopulatesPlayed()
+    {
+        var q = new SharedQueue();
+        var item = new VideoItem("a.mp4", "Custom Name", 99L);
+
+        q.MarkInFlight(item);
+        q.OnFinished("a.mp4");
+
+        q.InFlight.Should().BeEmpty();
+        q.Played.Should().ContainKey("a.mp4");
+        q.Played["a.mp4"].DisplayName.Should().Be("Custom Name");
+        q.Played["a.mp4"].FileSize.Should().Be(99L);
+    }
 }
