@@ -422,10 +422,32 @@ public partial class MainWindow : Window
 
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.F11)
-            WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
-        else if (e.Key == Key.Escape && _panelOpen)
-            ClosePanel();
+        // Ignore when a text input has focus
+        if (FocusManager.GetFocusedElement(this) is TextBox or PasswordBox) return;
+
+        switch (e.Key)
+        {
+            case Key.F11:
+                WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+                break;
+            case Key.Escape:
+                if (_panelOpen) ClosePanel();
+                break;
+            case Key.Space:
+                if (_audio.UnmutedPaneIndex is null) _audio.UnmutePane(0);
+                else _audio.MuteAll();
+                e.Handled = true;
+                break;
+            case Key.S:
+                _shuffleOn = !_shuffleOn;
+                Panel.SetShuffle(_shuffleOn);
+                SaveState();
+                break;
+            case Key.R:
+                _queue.Reshuffle();
+                SaveState();
+                break;
+        }
     }
 
     private void OnPlaylistDroppedOnPane(Pane targetPane, VideoItem item)
