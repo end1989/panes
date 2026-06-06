@@ -118,9 +118,9 @@ public partial class MainWindow : Window
         BuildGrid();
         ClosePanelInstant();
 
-        // First launch (no folder yet) → open the panel so the user can see the controls
-        if (_state.Folders.Count == 0)
-            Loaded += (_, _) => OpenPanel();
+        // Always open the panel on launch so the user can see the controls.
+        // They can close it with Escape, M, or the close chevron.
+        Loaded += (_, _) => OpenPanel();
 
         if (_persistence.LastLoadWasFallback)
             MessageBox.Show("Could not restore last session — starting fresh.", "Panes Local",
@@ -230,11 +230,9 @@ public partial class MainWindow : Window
 
     private void UpdatePanelState()
     {
-        if (!_panelOpen) return;
-        if (_panelAnchored) return;
-        if (_mouseLeftPanelAt == DateTime.MaxValue) return;
-        if ((DateTime.Now - _mouseLeftPanelAt).TotalMilliseconds > 600)
-            ClosePanel();
+        // Auto-close-on-mouse-leave was too aggressive — it killed the panel
+        // mid-interaction. Panel now stays open until the user closes it
+        // explicitly (Escape, M, click the close chevron).
     }
 
     private void OpenPanel()
@@ -440,6 +438,10 @@ public partial class MainWindow : Window
                 break;
             case Key.Escape:
                 if (_panelOpen) ClosePanel();
+                break;
+            case Key.M:
+                if (_panelOpen) ClosePanel(); else OpenPanel();
+                e.Handled = true;
                 break;
             case Key.Space:
                 if (_audio.UnmutedPaneIndex is null) _audio.UnmutePane(0);
