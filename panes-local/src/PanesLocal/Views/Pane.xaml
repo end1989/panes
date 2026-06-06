@@ -9,22 +9,15 @@
     <Grid>
         <vlc:VideoView x:Name="VlcView" Visibility="Collapsed" Focusable="False" IsHitTestVisible="False" />
 
-        <Grid x:Name="HoverOverlay"
-              VerticalAlignment="Top"
-              HorizontalAlignment="Right"
-              Margin="0,6,8,0"
-              Opacity="0">
-            <StackPanel Orientation="Horizontal">
-                <Button x:Name="MuteBtn" Content="🔇" Width="28" Height="28"
-                        Background="#80000000" Foreground="White" BorderThickness="0"
-                        Click="MuteBtn_Click" Margin="0,0,4,0"/>
-                <Button x:Name="SkipBtn" Content="⏭" Width="28" Height="28"
-                        Background="#80000000" Foreground="White" BorderThickness="0"
-                        Click="SkipBtn_Click" Margin="0,0,4,0"/>
-                <Button x:Name="StopBtn" Content="✕" Width="28" Height="28"
-                        Background="#80000000" Foreground="White" BorderThickness="0"
-                        Click="StopBtn_Click"/>
-            </StackPanel>
+        <!-- Per-pane controls moved to SidePanel's "Now Playing" section.
+             WPF buttons can't render over libVLC's HwndHost video surface
+             — the native window overdraws everything. The hover overlay
+             code remains in Pane.xaml.cs for the drag-to-swap behavior but
+             nothing is wired to MuteBtn/SkipBtn/StopBtn anymore. -->
+        <Grid x:Name="HoverOverlay" Visibility="Collapsed">
+            <Button x:Name="MuteBtn" Click="MuteBtn_Click"/>
+            <Button x:Name="SkipBtn" Click="SkipBtn_Click"/>
+            <Button x:Name="StopBtn" Click="StopBtn_Click"/>
         </Grid>
 
         <Border x:Name="DragHighlight"

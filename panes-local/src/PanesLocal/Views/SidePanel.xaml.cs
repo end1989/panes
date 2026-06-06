@@ -21,6 +21,9 @@ public partial class SidePanel : UserControl
     public event Action<bool>? RepeatAllToggled;
     public event Action? ReshuffleClicked;
     public event Action? ResetRequested;
+    public event Action<int>? PaneSkipRequested;
+    public event Action<int>? PaneMuteRequested;
+    public event Action<int>? PaneStopRequested;
 
     private int _cols = 2;
     private int _rows = 2;
@@ -50,7 +53,7 @@ public partial class SidePanel : UserControl
         RowsLabel.Text = rows.ToString();
     }
 
-    public void SetZoom(int zoom) => ZoomSlider.Value = zoom;
+    public void SetZoom(int zoom) { /* zoom UI removed; see MainWindow.ApplyZoom comment */ }
     public void SetShuffle(bool on) => ShuffleBtn.IsChecked = on;
     public void SetRepeatAll(bool on) => RepeatAllBtn.IsChecked = on;
     public void SetFolderName(string name) => FolderName.Text = name;
@@ -66,9 +69,6 @@ public partial class SidePanel : UserControl
     private void ColsMinus_Click(object s, RoutedEventArgs e) { if (_cols > 1) { _cols--; SetGrid(_cols, _rows); GridSizeChanged?.Invoke(_cols, _rows); } }
     private void RowsPlus_Click(object s, RoutedEventArgs e)  { if (_rows < 6) { _rows++; SetGrid(_cols, _rows); GridSizeChanged?.Invoke(_cols, _rows); } }
     private void RowsMinus_Click(object s, RoutedEventArgs e) { if (_rows > 1) { _rows--; SetGrid(_cols, _rows); GridSizeChanged?.Invoke(_cols, _rows); } }
-
-    private void ZoomSlider_ValueChanged(object s, RoutedPropertyChangedEventArgs<double> e)
-        => ZoomChanged?.Invoke((int)e.NewValue);
 
     private void ShuffleBtn_Click(object s, RoutedEventArgs e)   => ShuffleToggled?.Invoke(ShuffleBtn.IsChecked == true);
     private void RepeatAllBtn_Click(object s, RoutedEventArgs e) => RepeatAllToggled?.Invoke(RepeatAllBtn.IsChecked == true);
@@ -91,6 +91,47 @@ public partial class SidePanel : UserControl
 
     private void ClearQueueBtn_Click(object s, RoutedEventArgs e) => QueueCleared?.Invoke();
     private void ResetBtn_Click(object sender, RoutedEventArgs e) => ResetRequested?.Invoke();
+
+    public void RefreshSlots(IReadOnlyList<(int Index, string? FilePath, bool Unmuted)> info)
+    {
+        PaneSlotsHost.Children.Clear();
+        foreach (var (idx, filePath, unmuted) in info)
+        {
+            var row = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            var label = new TextBlock
+            {
+                Text = $"{idx + 1}. " + (filePath is null ? "(empty)" : System.IO.Path.GetFileNameWithoutExtension(filePath)),
+                Foreground = System.Windows.Media.Brushes.White,
+                FontSize = 11,
+                VerticalAlignment = VerticalAlignment.Center,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+            Grid.SetColumn(label, 0);
+            row.Children.Add(label);
+
+            var muteBtn = new Button { Content = unmuted ? "🔊" : "🔇", Width = 26, Height = 22, Margin = new Thickness(2, 0, 0, 0), Tag = idx };
+            muteBtn.Click += (_, _) => PaneMuteRequested?.Invoke(idx);
+            Grid.SetColumn(muteBtn, 1);
+            row.Children.Add(muteBtn);
+
+            var skipBtn = new Button { Content = "⏭", Width = 26, Height = 22, Margin = new Thickness(2, 0, 0, 0), Tag = idx };
+            skipBtn.Click += (_, _) => PaneSkipRequested?.Invoke(idx);
+            Grid.SetColumn(skipBtn, 2);
+            row.Children.Add(skipBtn);
+
+            var stopBtn = new Button { Content = "✕", Width = 26, Height = 22, Margin = new Thickness(2, 0, 0, 0), Tag = idx };
+            stopBtn.Click += (_, _) => PaneStopRequested?.Invoke(idx);
+            Grid.SetColumn(stopBtn, 3);
+            row.Children.Add(stopBtn);
+
+            PaneSlotsHost.Children.Add(row);
+        }
+    }
 
     public const string VideoItemFormat = "PanesLocal.VideoItem";
     public const string PaneIndexFormat = "PanesLocal.PaneIndex";

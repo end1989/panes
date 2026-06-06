@@ -90,8 +90,31 @@ public partial class MainWindow : Window
             Application.Current.Shutdown();
         };
 
+        Panel.PaneSkipRequested += idx =>
+        {
+            if (idx < 0 || idx >= _panes.Count) return;
+            var pane = _panes[idx];
+            if (pane.Current is not null) _queue.OnFinished(pane.Current.FilePath);
+            OnPaneRequestsNext(pane);
+        };
+        Panel.PaneMuteRequested += idx =>
+        {
+            if (idx < 0 || idx >= _panes.Count) return;
+            if (_audio.IsUnmuted(idx)) _audio.MutePane(idx);
+            else _audio.UnmutePane(idx);
+        };
+        Panel.PaneStopRequested += idx =>
+        {
+            if (idx < 0 || idx >= _panes.Count) return;
+            var pane = _panes[idx];
+            if (pane.Current is not null) _queue.Reinsert(pane.Current, int.MaxValue);
+            pane.StopAndBlank();
+        };
+
         _queue.Changed += SaveState;
+        _queue.Changed += RefreshPaneSlots;
         _audio.Changed += SaveState;
+        _audio.Changed += RefreshPaneSlots;
 
         Panel.Handle.MouseLeftButtonDown += (_, e) =>
         {
@@ -289,14 +312,16 @@ public partial class MainWindow : Window
 
     private void AnimatePanel(double target)
     {
+        // Snap instead of animate. The panel slide-in animation took ~200ms
+        // while PaneGrid.Margin changed instantly — that left a black gap
+        // during the slide. Instant snap = no transition glitch (the
+        // "videos go weird, double M to fix" symptom).
         var prop = (_dock is DockSide.Left or DockSide.Right)
             ? TranslateTransform.XProperty
             : TranslateTransform.YProperty;
-        var anim = new DoubleAnimation(target, TimeSpan.FromMilliseconds(200))
-        {
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
-        };
-        PanelTransform.BeginAnimation(prop, anim);
+        PanelTransform.BeginAnimation(prop, null);
+        if (prop == TranslateTransform.XProperty) PanelTransform.X = target;
+        else PanelTransform.Y = target;
     }
 
     private DockSide ResolveDockFromPosition(Point p)
@@ -411,6 +436,7 @@ public partial class MainWindow : Window
             }
 
         ApplyZoom();
+        RefreshPaneSlots();
         FillIdlePanesFromQueue();
     }
 
@@ -420,6 +446,15 @@ public partial class MainWindow : Window
         // used by LibVLCSharp's VideoView), so a ScaleTransform here makes the
         // pane chrome and the video go out of sync and one pane can appear to
         // detach visually. Disabled until we wire libVLC's native crop instead.
+    }
+
+    private void RefreshPaneSlots()
+    {
+        if (Panel is null) return;
+        var info = _panes
+            .Select(p => (p.PaneIndex, p.Current?.FilePath, _audio.IsUnmuted(p.PaneIndex)))
+            .ToList();
+        Panel.RefreshSlots(info);
     }
 
     private async void FillIdlePanesFromQueue()

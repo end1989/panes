@@ -47,12 +47,11 @@
             <Button       x:Name="ClearQueueBtn"   Content="Clear queue"    Margin="0,0,4,4" Click="ClearQueueBtn_Click"/>
         </WrapPanel>
 
-        <!-- Zoom -->
+        <!-- Now Playing (per-pane controls — moved here because WPF buttons
+             can't render over libVLC's video surface) -->
         <StackPanel Grid.Row="4" Margin="0,0,0,12">
-            <TextBlock Text="Zoom" Foreground="White"/>
-            <Slider x:Name="ZoomSlider" Minimum="100" Maximum="300" Value="100"
-                    TickFrequency="25" IsSnapToTickEnabled="True"
-                    ValueChanged="ZoomSlider_ValueChanged"/>
+            <TextBlock Text="Now Playing" Foreground="#888888" FontSize="10" Margin="0,0,0,4"/>
+            <StackPanel x:Name="PaneSlotsHost"/>
         </StackPanel>
 
         <!-- Playlist -->
