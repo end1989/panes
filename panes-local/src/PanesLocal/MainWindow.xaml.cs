@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using PanesLocal.Models;
 using PanesLocal.Services;
@@ -16,23 +17,34 @@ public partial class MainWindow : Window
     private readonly FolderScanner _scanner = new();
     private readonly List<Pane> _panes = new();
     private readonly DispatcherTimer _idleTimer;
+    private readonly DispatcherTimer _panelTimer;
     private DateTime _lastMouseMove = DateTime.Now;
+    private DateTime _mouseLeftPanelAt = DateTime.MaxValue;
+    private bool _panelOpen;
+    private bool _panelAnchored;
     private int _cols = 2, _rows = 2, _zoom = 100;
-    private bool _shuffleOn = true;
-    private bool _repeatAllOn = true;
+    private bool _shuffleOn = true, _repeatAllOn = true;
+    private const double PanelWidth = 320;
 
     public MainWindow()
     {
         InitializeComponent();
         KeyDown += OnKeyDown;
-        MouseMove += (_, _) => { _lastMouseMove = DateTime.Now; Cursor = Cursors.Arrow; };
+        MouseMove += OnMouseMove;
+        Panel.MouseEnter += (_, _) => _mouseLeftPanelAt = DateTime.MaxValue;
+        Panel.MouseLeave += (_, _) => _mouseLeftPanelAt = DateTime.Now;
+        Panel.PreviewMouseLeftButtonDown += (_, _) => _panelAnchored = true;
+
         _idleTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _idleTimer.Tick += (_, _) =>
         {
-            if ((DateTime.Now - _lastMouseMove).TotalSeconds > 3)
-                Cursor = Cursors.None;
+            if ((DateTime.Now - _lastMouseMove).TotalSeconds > 3) Cursor = Cursors.None;
         };
         _idleTimer.Start();
+
+        _panelTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+        _panelTimer.Tick += (_, _) => UpdatePanelState();
+        _panelTimer.Start();
 
         Panel.Attach(_queue, _audio);
         Panel.SetGrid(_cols, _rows);
@@ -42,15 +54,80 @@ public partial class MainWindow : Window
 
         Panel.GridSizeChanged += (c, r) => { _cols = c; _rows = r; BuildGrid(); };
         Panel.ZoomChanged += z => { _zoom = z; ApplyZoom(); };
-        Panel.FolderChosen += async path => await LoadFolderAsync(path, replace: true);
-        Panel.FolderAdded  += async path => await LoadFolderAsync(path, replace: false);
-        Panel.QueueCleared += () => { _queue.Clear(); foreach (var p in _panes) p.StopAndBlank(); };
+        Panel.FolderChosen += async p => await LoadFolderAsync(p, replace: true);
+        Panel.FolderAdded  += async p => await LoadFolderAsync(p, replace: false);
+        Panel.QueueCleared += () => { _queue.Clear(); foreach (var pn in _panes) pn.StopAndBlank(); };
         Panel.ShuffleToggled += on => _shuffleOn = on;
         Panel.RepeatAllToggled += on => _repeatAllOn = on;
         Panel.ReshuffleClicked += () => _queue.Reshuffle();
 
         BuildGrid();
+        ClosePanelInstant();
     }
+
+    private void OnMouseMove(object sender, MouseEventArgs e)
+    {
+        _lastMouseMove = DateTime.Now;
+        Cursor = Cursors.Arrow;
+        var p = e.GetPosition(this);
+
+        // Show chevron when cursor is within 24px of the right edge
+        if (ActualWidth - p.X < 24 && !_panelOpen)
+            OpenChevron.Opacity = 0.7;
+        else if (!IsMouseOver(OpenChevron, e))
+            OpenChevron.Opacity = 0.25;
+    }
+
+    private bool IsMouseOver(UIElement el, MouseEventArgs e)
+    {
+        var pos = e.GetPosition(el);
+        return pos.X >= 0 && pos.Y >= 0 && pos.X <= el.RenderSize.Width && pos.Y <= el.RenderSize.Height;
+    }
+
+    private void UpdatePanelState()
+    {
+        if (!_panelOpen) return;
+        if (_panelAnchored) return;
+        if (_mouseLeftPanelAt == DateTime.MaxValue) return;
+        if ((DateTime.Now - _mouseLeftPanelAt).TotalMilliseconds > 600)
+            ClosePanel();
+    }
+
+    private void OpenPanel()
+    {
+        _panelOpen = true;
+        OpenChevron.Visibility = Visibility.Collapsed;
+        AnimatePanel(targetX: 0);
+    }
+
+    private void ClosePanel()
+    {
+        _panelOpen = false;
+        _panelAnchored = false;
+        _mouseLeftPanelAt = DateTime.MaxValue;
+        OpenChevron.Visibility = Visibility.Visible;
+        AnimatePanel(targetX: PanelWidth);
+    }
+
+    private void ClosePanelInstant()
+    {
+        _panelOpen = false;
+        PanelTransform.X = PanelWidth;
+        OpenChevron.Visibility = Visibility.Visible;
+    }
+
+    private void AnimatePanel(double targetX)
+    {
+        var anim = new DoubleAnimation(targetX, TimeSpan.FromMilliseconds(200))
+        {
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
+        };
+        PanelTransform.BeginAnimation(TranslateTransform.XProperty, anim);
+    }
+
+    private void OpenChevron_MouseEnter(object s, MouseEventArgs e) => OpenChevron.Opacity = 0.7;
+    private void OpenChevron_MouseLeave(object s, MouseEventArgs e) => OpenChevron.Opacity = 0.25;
+    private void OpenChevron_Click(object s, MouseButtonEventArgs e) => OpenPanel();
 
     private async Task LoadFolderAsync(string path, bool replace)
     {
@@ -128,7 +205,7 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.F11)
             WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
-        else if (e.Key == Key.Escape)
-            { /* close panel — wired in Task 9 */ }
+        else if (e.Key == Key.Escape && _panelOpen)
+            ClosePanel();
     }
 }
