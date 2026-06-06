@@ -29,6 +29,60 @@ public partial class Pane : UserControl, IDisposable
         InitializeComponent();
         MouseEnter += (_, _) => FadeOverlay(1);
         MouseLeave += (_, _) => FadeOverlay(0);
+
+        PreviewMouseLeftButtonDown += OnPaneMouseDown;
+        PreviewMouseMove += OnPaneMouseMove;
+        Drop += OnPaneDrop;
+        DragEnter += (_, _) => DragHighlight.Visibility = Visibility.Visible;
+        DragLeave += (_, _) => DragHighlight.Visibility = Visibility.Collapsed;
+        DragOver += (s, e) =>
+        {
+            e.Effects = e.Data.GetDataPresent(SidePanel.VideoItemFormat)
+                       || e.Data.GetDataPresent(SidePanel.PaneIndexFormat)
+                ? DragDropEffects.Move : DragDropEffects.None;
+            e.Handled = true;
+        };
+    }
+
+    private Point _paneDragStart;
+
+    private void OnPaneMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        _paneDragStart = e.GetPosition(null);
+    }
+
+    private void OnPaneMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed) return;
+        if (Current is null) return;
+        var p = e.GetPosition(null);
+        if (Math.Abs(p.X - _paneDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(p.Y - _paneDragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        if (HoverOverlay.IsMouseOver) return;       // don't drag when clicking the overlay buttons
+        var data = new DataObject(SidePanel.PaneIndexFormat, PaneIndex);
+        DragDrop.DoDragDrop(this, data, DragDropEffects.Move);
+    }
+
+    public event Action<Pane, VideoItem>? PlaylistItemDroppedOnMe;     // raised on playlist→pane drop
+    public event Action<Pane, int>? PaneDroppedOnMe;                   // raised on pane→pane drop (other pane index)
+
+    private void OnPaneDrop(object sender, DragEventArgs e)
+    {
+        DragHighlight.Visibility = Visibility.Collapsed;
+
+        if (e.Data.GetDataPresent(SidePanel.VideoItemFormat))
+        {
+            var item = (VideoItem)e.Data.GetData(SidePanel.VideoItemFormat)!;
+            PlaylistItemDroppedOnMe?.Invoke(this, item);
+            return;
+        }
+
+        if (e.Data.GetDataPresent(SidePanel.PaneIndexFormat))
+        {
+            var otherIdx = (int)e.Data.GetData(SidePanel.PaneIndexFormat)!;
+            if (otherIdx == PaneIndex) return;
+            PaneDroppedOnMe?.Invoke(this, otherIdx);
+        }
     }
 
     public void Attach(SharedQueue queue, AudioCoordinator audio)

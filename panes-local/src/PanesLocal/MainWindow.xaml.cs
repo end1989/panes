@@ -60,6 +60,7 @@ public partial class MainWindow : Window
         Panel.ShuffleToggled += on => _shuffleOn = on;
         Panel.RepeatAllToggled += on => _repeatAllOn = on;
         Panel.ReshuffleClicked += () => _queue.Reshuffle();
+        Panel.PaneDroppedOnPlaylist += OnPaneDroppedOnPlaylist;
 
         BuildGrid();
         ClosePanelInstant();
@@ -160,6 +161,8 @@ public partial class MainWindow : Window
                 pane.RequestNext   += OnPaneRequestsNext;
                 pane.RequestUnmute += p => _audio.UnmutePane(p.PaneIndex);
                 pane.RequestMute   += p => _audio.MutePane(p.PaneIndex);
+                pane.PlaylistItemDroppedOnMe += OnPlaylistDroppedOnPane;
+                pane.PaneDroppedOnMe += OnPaneDroppedOnPane;
                 Grid.SetColumn(pane, c);
                 Grid.SetRow(pane, r);
                 PaneGrid.Children.Add(pane);
@@ -207,5 +210,43 @@ public partial class MainWindow : Window
             WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
         else if (e.Key == Key.Escape && _panelOpen)
             ClosePanel();
+    }
+
+    private void OnPlaylistDroppedOnPane(Pane targetPane, VideoItem item)
+    {
+        // Boot current video to bottom of queue
+        if (targetPane.Current is not null)
+            _queue.Reinsert(targetPane.Current, int.MaxValue);
+        // Pull the dropped item out of queue and play it
+        _queue.Remove(item);
+        _queue.InFlight.Add(item.FilePath);
+        targetPane.Play(item);
+    }
+
+    private void OnPaneDroppedOnPane(Pane targetPane, int otherIndex)
+    {
+        if (otherIndex < 0 || otherIndex >= _panes.Count) return;
+        var other = _panes[otherIndex];
+        var a = targetPane.Current;
+        var b = other.Current;
+        if (a is null && b is null) return;
+
+        if (a is not null) other.Play(a);
+        else other.StopAndBlank();
+
+        if (b is not null) targetPane.Play(b);
+        else targetPane.StopAndBlank();
+    }
+
+    private void OnPaneDroppedOnPlaylist(int paneIndex, int dropPosition)
+    {
+        if (paneIndex < 0 || paneIndex >= _panes.Count) return;
+        var pane = _panes[paneIndex];
+        if (pane.Current is null) return;
+        _queue.Reinsert(pane.Current, dropPosition);
+        pane.StopAndBlank();
+        // pane will be filled from queue by next idle tick? We do it explicitly:
+        var next = _queue.TakeNext();
+        if (next is not null) pane.Play(next);
     }
 }
