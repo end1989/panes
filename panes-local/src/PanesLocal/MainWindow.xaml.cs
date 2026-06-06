@@ -1,8 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
-using Microsoft.Win32;
 using PanesLocal.Models;
 using PanesLocal.Services;
 using PanesLocal.Views;
@@ -17,8 +17,9 @@ public partial class MainWindow : Window
     private readonly List<Pane> _panes = new();
     private readonly DispatcherTimer _idleTimer;
     private DateTime _lastMouseMove = DateTime.Now;
-    private int _cols = 2;
-    private int _rows = 2;
+    private int _cols = 2, _rows = 2, _zoom = 100;
+    private bool _shuffleOn = true;
+    private bool _repeatAllOn = true;
 
     public MainWindow()
     {
@@ -33,7 +34,31 @@ public partial class MainWindow : Window
         };
         _idleTimer.Start();
 
+        Panel.Attach(_queue, _audio);
+        Panel.SetGrid(_cols, _rows);
+        Panel.SetZoom(_zoom);
+        Panel.SetShuffle(_shuffleOn);
+        Panel.SetRepeatAll(_repeatAllOn);
+
+        Panel.GridSizeChanged += (c, r) => { _cols = c; _rows = r; BuildGrid(); };
+        Panel.ZoomChanged += z => { _zoom = z; ApplyZoom(); };
+        Panel.FolderChosen += async path => await LoadFolderAsync(path, replace: true);
+        Panel.FolderAdded  += async path => await LoadFolderAsync(path, replace: false);
+        Panel.QueueCleared += () => { _queue.Clear(); foreach (var p in _panes) p.StopAndBlank(); };
+        Panel.ShuffleToggled += on => _shuffleOn = on;
+        Panel.RepeatAllToggled += on => _repeatAllOn = on;
+        Panel.ReshuffleClicked += () => _queue.Reshuffle();
+
         BuildGrid();
+    }
+
+    private async Task LoadFolderAsync(string path, bool replace)
+    {
+        if (replace) { _queue.Clear(); foreach (var p in _panes) p.StopAndBlank(); }
+        var items = await _scanner.ScanAsync(path, progress: null, CancellationToken.None);
+        _queue.AddAll(items);
+        if (_shuffleOn) _queue.Shuffle();
+        FillIdlePanesFromQueue();
     }
 
     private void BuildGrid()
@@ -55,7 +80,7 @@ public partial class MainWindow : Window
             {
                 var pane = new Pane { PaneIndex = idx };
                 pane.Attach(_queue, _audio);
-                pane.RequestNext  += OnPaneRequestsNext;
+                pane.RequestNext   += OnPaneRequestsNext;
                 pane.RequestUnmute += p => _audio.UnmutePane(p.PaneIndex);
                 pane.RequestMute   += p => _audio.MutePane(p.PaneIndex);
                 Grid.SetColumn(pane, c);
@@ -65,7 +90,15 @@ public partial class MainWindow : Window
                 idx++;
             }
 
+        ApplyZoom();
         FillIdlePanesFromQueue();
+    }
+
+    private void ApplyZoom()
+    {
+        var scale = _zoom / 100.0;
+        foreach (var pane in _panes)
+            pane.RenderTransform = new ScaleTransform(scale, scale, 0.5, 0.5);
     }
 
     private void FillIdlePanesFromQueue()
@@ -82,29 +115,20 @@ public partial class MainWindow : Window
     private void OnPaneRequestsNext(Pane p)
     {
         var next = _queue.TakeNext();
+        if (next is null && _repeatAllOn && _queue.Played.Count > 0)
+        {
+            _queue.RefillFromPlayed(_shuffleOn);
+            next = _queue.TakeNext();
+        }
         if (next is null) { p.StopAndBlank(); return; }
         p.Play(next);
-    }
-
-    private async void LoadFolderTempBtn_Click(object sender, RoutedEventArgs e)
-    {
-        var dlg = new OpenFolderDialog();
-        if (dlg.ShowDialog() != true) return;
-        LoadFolderTempBtn.Visibility = Visibility.Collapsed;
-
-        var items = await _scanner.ScanAsync(dlg.FolderName, progress: null, CancellationToken.None);
-        _queue.AddAll(items);
-        _queue.Shuffle();
-        FillIdlePanesFromQueue();
     }
 
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.F11)
-        {
-            WindowState = WindowState == WindowState.Maximized
-                ? WindowState.Normal
-                : WindowState.Maximized;
-        }
+            WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+        else if (e.Key == Key.Escape)
+            { /* close panel — wired in Task 9 */ }
     }
 }
