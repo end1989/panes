@@ -20,6 +20,7 @@ public partial class SidePanel : UserControl
     public event Action<bool>? ShuffleToggled;
     public event Action<bool>? RepeatAllToggled;
     public event Action? ReshuffleClicked;
+    public event Action? ResetRequested;
 
     private int _cols = 2;
     private int _rows = 2;
@@ -89,6 +90,7 @@ public partial class SidePanel : UserControl
     }
 
     private void ClearQueueBtn_Click(object s, RoutedEventArgs e) => QueueCleared?.Invoke();
+    private void ResetBtn_Click(object sender, RoutedEventArgs e) => ResetRequested?.Invoke();
 
     public const string VideoItemFormat = "PanesLocal.VideoItem";
     public const string PaneIndexFormat = "PanesLocal.PaneIndex";

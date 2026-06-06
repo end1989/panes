@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -28,6 +29,8 @@ public partial class MainWindow : Window
     private DockSide _dock = DockSide.Right;
     private bool _draggingPanel;
     private Point _dragStartPos;
+    private readonly PersistenceService _persistence = new(App.StateFilePath);
+    private AppState _state = new();
 
     public MainWindow()
     {
@@ -39,15 +42,31 @@ public partial class MainWindow : Window
         Panel.PreviewMouseLeftButtonDown += (_, _) => _panelAnchored = true;
 
         _idleTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
-        _idleTimer.Tick += (_, _) =>
-        {
-            if ((DateTime.Now - _lastMouseMove).TotalSeconds > 3) Cursor = Cursors.None;
-        };
+        _idleTimer.Tick += (_, _) => { if ((DateTime.Now - _lastMouseMove).TotalSeconds > 3) Cursor = Cursors.None; };
         _idleTimer.Start();
 
         _panelTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _panelTimer.Tick += (_, _) => UpdatePanelState();
         _panelTimer.Start();
+
+        _state = _persistence.Load();
+        _cols = _state.Grid.Cols;
+        _rows = _state.Grid.Rows;
+        _zoom = _state.Zoom;
+        _shuffleOn = _state.Transport.Shuffle;
+        _repeatAllOn = _state.Transport.RepeatAll;
+        _dock = _state.Panel.Dock;
+        Width  = _state.Window.Width;
+        Height = _state.Window.Height;
+        Left   = _state.Window.X;
+        Top    = _state.Window.Y;
+        if (_state.Window.Maximized) WindowState = WindowState.Maximized;
+
+        // Restore queue: rescan folders + filter saved paths
+        if (_state.Folders.Count > 0)
+        {
+            _ = RestoreSessionAsync();
+        }
 
         Panel.Attach(_queue, _audio);
         Panel.SetGrid(_cols, _rows);
@@ -55,15 +74,24 @@ public partial class MainWindow : Window
         Panel.SetShuffle(_shuffleOn);
         Panel.SetRepeatAll(_repeatAllOn);
 
-        Panel.GridSizeChanged += (c, r) => { _cols = c; _rows = r; BuildGrid(); };
-        Panel.ZoomChanged += z => { _zoom = z; ApplyZoom(); };
-        Panel.FolderChosen += async p => await LoadFolderAsync(p, replace: true);
-        Panel.FolderAdded  += async p => await LoadFolderAsync(p, replace: false);
-        Panel.QueueCleared += () => { _queue.Clear(); foreach (var pn in _panes) pn.StopAndBlank(); };
-        Panel.ShuffleToggled += on => _shuffleOn = on;
-        Panel.RepeatAllToggled += on => _repeatAllOn = on;
-        Panel.ReshuffleClicked += () => _queue.Reshuffle();
+        Panel.GridSizeChanged += (c, r) => { _cols = c; _rows = r; BuildGrid(); SaveState(); };
+        Panel.ZoomChanged += z => { _zoom = z; ApplyZoom(); SaveState(); };
+        Panel.FolderChosen += async p => { _state.Folders.Clear(); _state.Folders.Add(p); await LoadFolderAsync(p, true); SaveState(); };
+        Panel.FolderAdded  += async p => { if (!_state.Folders.Contains(p)) _state.Folders.Add(p); await LoadFolderAsync(p, false); SaveState(); };
+        Panel.QueueCleared += () => { _queue.Clear(); foreach (var pn in _panes) pn.StopAndBlank(); SaveState(); };
+        Panel.ShuffleToggled += on => { _shuffleOn = on; SaveState(); };
+        Panel.RepeatAllToggled += on => { _repeatAllOn = on; SaveState(); };
+        Panel.ReshuffleClicked += () => { _queue.Reshuffle(); SaveState(); };
         Panel.PaneDroppedOnPlaylist += OnPaneDroppedOnPlaylist;
+        Panel.ResetRequested += () =>
+        {
+            if (File.Exists(App.StateFilePath)) File.Delete(App.StateFilePath);
+            System.Diagnostics.Process.Start(System.Diagnostics.Process.GetCurrentProcess().MainModule!.FileName!);
+            Application.Current.Shutdown();
+        };
+
+        _queue.Changed += SaveState;
+        _audio.Changed += SaveState;
 
         Panel.Handle.MouseLeftButtonDown += (_, e) =>
         {
@@ -78,12 +106,99 @@ public partial class MainWindow : Window
             _draggingPanel = false;
             Panel.Handle.ReleaseMouseCapture();
             var p = e.GetPosition(this);
-            var newDock = ResolveDockFromPosition(p);
-            ApplyDock(newDock);
+            ApplyDock(ResolveDockFromPosition(p));
+            SaveState();
         };
 
+        Closing += OnClosing;
+        SizeChanged += (_, _) => SaveState();
+        LocationChanged += (_, _) => SaveState();
+
+        ApplyDock(_dock);
         BuildGrid();
         ClosePanelInstant();
+
+        if (_persistence.LastLoadWasFallback)
+            MessageBox.Show("Could not restore last session — starting fresh.", "Panes Local",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private async Task RestoreSessionAsync()
+    {
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var folder in _state.Folders)
+        {
+            try
+            {
+                var items = await _scanner.ScanAsync(folder, progress: null, CancellationToken.None);
+                foreach (var i in items) existing.Add(i.FilePath);
+            }
+            catch { /* folder missing → skip */ }
+        }
+        // Items the saved queue still finds on disk, in order
+        foreach (var path in _state.Queue.Where(existing.Contains))
+            _queue.Items.Add(new VideoItem(path, System.IO.Path.GetFileName(path), 0));
+        // Played list — keep filtered
+        foreach (var path in _state.Played.Where(existing.Contains))
+            _queue.Played[path] = new VideoItem(path, System.IO.Path.GetFileName(path), 0);
+        // Newly discovered files: append
+        var known = new HashSet<string>(_queue.Items.Select(i => i.FilePath));
+        foreach (var p in _queue.InFlight) known.Add(p);
+        foreach (var p in _queue.Played.Keys) known.Add(p);
+        foreach (var path in existing.Where(p => !known.Contains(p)))
+            _queue.Items.Add(new VideoItem(path, System.IO.Path.GetFileName(path), 0));
+
+        if (_shuffleOn) _queue.Shuffle();
+
+        // Restore per-pane current video at saved position
+        foreach (var ps in _state.Panes)
+        {
+            if (ps.FilePath is null) continue;
+            if (!existing.Contains(ps.FilePath)) continue;
+            if (ps.Index < 0 || ps.Index >= _panes.Count) continue;
+            var v = new VideoItem(ps.FilePath, System.IO.Path.GetFileName(ps.FilePath), 0);
+            _queue.Remove(v);
+            _queue.MarkInFlight(v);
+            _panes[ps.Index].Play(v, ps.PositionSeconds);
+        }
+
+        if (_state.Audio.UnmutedPaneIndex is int u) _audio.UnmutePane(u);
+        FillIdlePanesFromQueue();
+    }
+
+    private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        SaveStateSync();
+    }
+
+    private void SaveState()
+    {
+        SyncStateFromUi();
+        _persistence.SaveDebounced(_state);
+    }
+
+    private void SaveStateSync()
+    {
+        SyncStateFromUi();
+        _ = _persistence.SaveImmediateAsync(_state);
+    }
+
+    private void SyncStateFromUi()
+    {
+        _state.Window = new AppState.WindowState
+        {
+            X = Left, Y = Top, Width = Width, Height = Height,
+            Maximized = WindowState == WindowState.Maximized,
+            Fullscreen = false
+        };
+        _state.Grid = new AppState.GridState { Cols = _cols, Rows = _rows };
+        _state.Zoom = _zoom;
+        _state.Panel = new AppState.PanelState { Dock = _dock, Size = PanelWidth };
+        _state.Transport = new AppState.TransportState { Shuffle = _shuffleOn, RepeatAll = _repeatAllOn };
+        _state.Audio = new AppState.AudioState { UnmutedPaneIndex = _audio.UnmutedPaneIndex };
+        _state.Queue = _queue.Items.Select(i => i.FilePath).ToList();
+        _state.Played = _queue.Played.Keys.ToList();
+        _state.Panes = _panes.Select(p => new PaneState(p.PaneIndex, p.Current?.FilePath, p.CurrentPositionSeconds)).ToList();
     }
 
     private void OnMouseMove(object sender, MouseEventArgs e)
