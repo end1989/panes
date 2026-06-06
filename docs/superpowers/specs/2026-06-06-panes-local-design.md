@@ -18,7 +18,7 @@ Build a lightweight, high-quality, chrome-less multi-pane local video player. Pi
 
 ## Stack
 
-- **.NET 8 + WPF** — native Windows UI, per-monitor DPI, mature.
+- **.NET 10 (LTS) + WPF** — native Windows UI, per-monitor DPI, mature. .NET 10 is the current LTS (released Nov 2025, supported through Nov 2028).
 - **LibVLCSharp** (NuGet) + **VideoLAN.LibVLC.Windows** — playback. One `MediaPlayer` per pane bound to a `VideoView`. Plays every common video format.
 - **Inno Setup** — installer (`setup.exe`, per-user install, Start Menu + desktop shortcuts).
 - No web tech, no Electron, no Chromium.
@@ -106,7 +106,7 @@ public class SharedQueue {
 
 ## Folder Loading
 
-- "Choose Folder…" button in the side panel → `Microsoft.Win32.OpenFolderDialog` (.NET 8 built-in).
+- "Choose Folder…" button in the side panel → `Microsoft.Win32.OpenFolderDialog` (.NET 10 built-in).
 - `FolderScanner.ScanAsync(path, ct)` walks recursively on a background thread.
 - Extension filter (initial): `.mp4 .mkv .avi .mov .webm .m4v .wmv .flv .ts .mpg .mpeg .ogv`. Easy to extend.
 - Hidden/system files skipped. Symlinks not followed.

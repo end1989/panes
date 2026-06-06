@@ -2,11 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a standalone Windows .NET 8 WPF application that displays a multi-pane video wall backed by a single shared queue of files scanned from a local folder, with an edge-peek side panel, drag-and-drop playlist editing, and a Windows installer.
+**Goal:** Build a standalone Windows .NET 10 WPF application that displays a multi-pane video wall backed by a single shared queue of files scanned from a local folder, with an edge-peek side panel, drag-and-drop playlist editing, and a Windows installer.
 
 **Architecture:** A `SharedQueue` model is the single source of truth; each `Pane` user control owns one `LibVLCSharp` `MediaPlayer` and pulls from the queue when it finishes a video. The `SidePanel` is a borderless slide-out that hugs whichever window edge it's docked to. All state persists to `%AppData%\PanesLocal\state.json` via a debounced atomic-write `PersistenceService`. The whole app builds into one self-contained exe and is packaged by Inno Setup.
 
-**Tech Stack:** .NET 8 / WPF / C# 12, LibVLCSharp + LibVLCSharp.WPF + VideoLAN.LibVLC.Windows, xUnit + FluentAssertions, Inno Setup 6.
+**Tech Stack:** .NET 10 (LTS) / WPF / C# 14, LibVLCSharp + LibVLCSharp.WPF + VideoLAN.LibVLC.Windows, xUnit + FluentAssertions, Inno Setup 6.
 
 **Spec:** `docs/superpowers/specs/2026-06-06-panes-local-design.md` — every task in this plan references a section of the spec by name.
 
@@ -16,7 +16,7 @@
 
 The engineer needs these installed:
 
-1. **.NET 8 SDK** — verify with `dotnet --version`. Expected: `8.0.x` or higher. Install from <https://dot.net> if missing.
+1. **.NET 10 SDK** — verify with `dotnet --version`. Expected: `10.0.x`. Install from <https://dotnet.microsoft.com/download/dotnet/10.0> if missing.
 2. **Inno Setup 6** — verify with `iscc /?`. Install from <https://jrsoftware.org/isdl.php> if missing. Add `C:\Program Files (x86)\Inno Setup 6` to PATH.
 
 If either is missing, install before starting Task 1. Tasks 1–14 work without Inno Setup; only Task 15 needs it.
@@ -83,7 +83,7 @@ Run from the repo root:
 ```powershell
 cd panes-local
 dotnet new sln -n PanesLocal
-dotnet new wpf -n PanesLocal -o src/PanesLocal --framework net8.0
+dotnet new wpf -n PanesLocal -o src/PanesLocal --framework net10.0-windows
 dotnet sln add src/PanesLocal/PanesLocal.csproj
 ```
 
@@ -96,7 +96,7 @@ Overwrite `panes-local/src/PanesLocal/PanesLocal.csproj`:
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
@@ -216,13 +216,13 @@ public partial class MainWindow : Window
 - [ ] **Step 7: Create the test project**
 
 ```powershell
-dotnet new xunit -n PanesLocal.Tests -o tests/PanesLocal.Tests --framework net8.0
+dotnet new xunit -n PanesLocal.Tests -o tests/PanesLocal.Tests --framework net10.0-windows
 dotnet sln add tests/PanesLocal.Tests/PanesLocal.Tests.csproj
 dotnet add tests/PanesLocal.Tests/PanesLocal.Tests.csproj package FluentAssertions --version 6.12.0
 dotnet add tests/PanesLocal.Tests/PanesLocal.Tests.csproj reference src/PanesLocal/PanesLocal.csproj
 ```
 
-After running, open `panes-local/tests/PanesLocal.Tests/PanesLocal.Tests.csproj` and change `<TargetFramework>` from `net8.0` to `net8.0-windows` so the test project can reference WPF types if needed.
+Verify `panes-local/tests/PanesLocal.Tests/PanesLocal.Tests.csproj` has `<TargetFramework>net10.0-windows</TargetFramework>` so the test project can reference WPF types if needed.
 
 - [ ] **Step 8: Create README and gitignore**
 
@@ -3264,7 +3264,7 @@ UninstallDisplayIcon={app}\{#AppExe}
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"
 
 [Files]
-Source: "..\src\PanesLocal\bin\Release\net8.0-windows\win-x64\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "..\src\PanesLocal\bin\Release\net10.0-windows\win-x64\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExe}"
@@ -3317,7 +3317,7 @@ cd panes-local
 
 Expected:
 1. `dotnet test` passes.
-2. `dotnet publish` produces `src/PanesLocal/bin/Release/net8.0-windows/win-x64/publish/PanesLocal.exe` plus libvlc DLLs.
+2. `dotnet publish` produces `src/PanesLocal/bin/Release/net10.0-windows/win-x64/publish/PanesLocal.exe` plus libvlc DLLs.
 3. `iscc` produces `dist/PanesLocal-Setup.exe`.
 
 Manual test of the installer:
