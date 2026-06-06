@@ -40,7 +40,7 @@ public class SharedQueueTests
         q.OnFinished("a.mp4");
 
         q.InFlight.Should().BeEmpty();
-        q.Played.Should().Contain("a.mp4");
+        q.Played.Should().ContainKey("a.mp4");
     }
 
     [Fact]
@@ -93,8 +93,8 @@ public class SharedQueueTests
 
         var inItems = q.Items.Select(i => i.FilePath).ToHashSet();
         inItems.Overlaps(q.InFlight).Should().BeFalse();
-        inItems.Overlaps(q.Played).Should().BeFalse();
-        q.InFlight.Overlaps(q.Played).Should().BeFalse();
+        inItems.Overlaps(q.Played.Keys).Should().BeFalse();
+        q.InFlight.Overlaps(q.Played.Keys).Should().BeFalse();
     }
 
     [Fact]
@@ -136,5 +136,77 @@ public class SharedQueueTests
         q.Items.Should().HaveCount(50);
         q.Items.Select(i => i.FilePath).Should().BeEquivalentTo(before);
         q.Items.Select(i => i.FilePath).SequenceEqual(before).Should().BeFalse();  // statistically certain for 50 items
+    }
+
+    [Fact]
+    public void MoveUp_MovesItemOneSlotUp_AndStopsAtTop()
+    {
+        var q = new SharedQueue();
+        q.AddAll(new[] { V("a.mp4"), V("b.mp4"), V("c.mp4") });
+
+        q.MoveUp(q.Items[2]);   // c moves to slot 1
+        q.Items[1].FilePath.Should().Be("c.mp4");
+
+        var top = q.Items[0];
+        q.MoveUp(top);          // already at top → no-op
+        q.Items[0].Should().BeSameAs(top);
+    }
+
+    [Fact]
+    public void MoveDown_MovesItemOneSlotDown_AndStopsAtBottom()
+    {
+        var q = new SharedQueue();
+        q.AddAll(new[] { V("a.mp4"), V("b.mp4"), V("c.mp4") });
+
+        q.MoveDown(q.Items[0]);  // a moves to slot 1
+        q.Items[1].FilePath.Should().Be("a.mp4");
+
+        var bottom = q.Items[2];
+        q.MoveDown(bottom);      // already at bottom → no-op
+        q.Items[2].Should().BeSameAs(bottom);
+    }
+
+    [Fact]
+    public void Clear_EmptiesAllThreeCollections()
+    {
+        var q = new SharedQueue();
+        q.AddAll(new[] { V("a.mp4"), V("b.mp4") });
+        q.TakeNext();
+        q.OnFinished("a.mp4");
+
+        q.Clear();
+
+        q.Items.Should().BeEmpty();
+        q.InFlight.Should().BeEmpty();
+        q.Played.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void RefillFromPlayed_PreservesOriginalVideoItemMetadata()
+    {
+        var q = new SharedQueue();
+        var original = new VideoItem("a.mp4", "Custom Name", 12345L);
+        q.AddAll(new[] { original });
+        q.TakeNext();
+        q.OnFinished("a.mp4");
+
+        q.RefillFromPlayed(shuffle: false);
+
+        q.Items.Should().ContainSingle();
+        q.Items[0].FilePath.Should().Be("a.mp4");
+        q.Items[0].DisplayName.Should().Be("Custom Name");
+        q.Items[0].FileSize.Should().Be(12345L);
+    }
+
+    [Fact]
+    public void Reinsert_OnPathAlreadyInItems_DoesNotDuplicate()
+    {
+        var q = new SharedQueue();
+        q.AddAll(new[] { V("a.mp4"), V("b.mp4") });
+        // a is in Items; force a buggy reinsert
+        q.Reinsert(V("a.mp4"), position: 0);
+
+        q.Items.Should().HaveCount(2);
+        q.Items.Select(i => i.FilePath).Should().BeEquivalentTo(new[] { "a.mp4", "b.mp4" });
     }
 }

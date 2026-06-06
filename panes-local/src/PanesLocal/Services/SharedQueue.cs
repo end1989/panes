@@ -8,7 +8,9 @@ public class SharedQueue
 {
     public ObservableCollection<VideoItem> Items { get; } = new();
     public HashSet<string> InFlight { get; } = new();
-    public HashSet<string> Played { get; } = new();
+    public Dictionary<string, VideoItem> Played { get; } = new();
+
+    private readonly Dictionary<string, VideoItem> _inFlightItems = new();
 
     public event Action? Changed;
 
@@ -30,20 +32,25 @@ public class SharedQueue
         var first = Items[0];
         Items.RemoveAt(0);
         InFlight.Add(first.FilePath);
+        _inFlightItems[first.FilePath] = first;
         NotifyChanged();
         return first;
     }
 
     public void OnFinished(string path)
     {
-        if (InFlight.Remove(path)) Played.Add(path);
+        if (InFlight.Remove(path) && _inFlightItems.Remove(path, out var item))
+            Played[path] = item;
         NotifyChanged();
     }
 
     public void Reinsert(VideoItem item, int position)
     {
         InFlight.Remove(item.FilePath);
+        _inFlightItems.Remove(item.FilePath);
         Played.Remove(item.FilePath);
+        var existing = Items.FirstOrDefault(i => i.FilePath == item.FilePath);
+        if (existing is not null) Items.Remove(existing);
         var idx = Math.Clamp(position, 0, Items.Count);
         Items.Insert(idx, item);
         NotifyChanged();
@@ -54,6 +61,7 @@ public class SharedQueue
         var existing = Items.FirstOrDefault(i => i.FilePath == item.FilePath);
         if (existing is not null) Items.Remove(existing);
         InFlight.Remove(item.FilePath);
+        _inFlightItems.Remove(item.FilePath);
         Played.Remove(item.FilePath);
         NotifyChanged();
     }
@@ -99,7 +107,7 @@ public class SharedQueue
 
     public void RefillFromPlayed(bool shuffle)
     {
-        var refill = Played.Select(p => new VideoItem(p, Path.GetFileName(p), 0L)).ToList();
+        var refill = Played.Values.ToList();
         Played.Clear();
         foreach (var v in refill) Items.Add(v);
         if (shuffle) Shuffle();
@@ -110,12 +118,13 @@ public class SharedQueue
     {
         Items.Clear();
         InFlight.Clear();
+        _inFlightItems.Clear();
         Played.Clear();
         NotifyChanged();
     }
 
     private bool KnownPath(string path)
         => InFlight.Contains(path)
-        || Played.Contains(path)
+        || Played.ContainsKey(path)
         || Items.Any(i => i.FilePath == path);
 }
