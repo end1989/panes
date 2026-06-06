@@ -9,8 +9,6 @@ dotnet test --nologo --verbosity minimal
 Write-Host "==> dotnet publish" -ForegroundColor Cyan
 dotnet publish src/PanesLocal/PanesLocal.csproj `
     -c Release -r win-x64 --self-contained `
-    -p:PublishSingleFile=true `
-    -p:IncludeNativeLibrariesForSelfExtract=true `
     --nologo --verbosity minimal
 
 Write-Host "==> Inno Setup" -ForegroundColor Cyan
