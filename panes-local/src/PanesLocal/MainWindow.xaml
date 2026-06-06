@@ -6,6 +6,18 @@
         Background="#000000"
         WindowStyle="None"
         ResizeMode="CanResize"
-        AllowsTransparency="False">
-    <Grid x:Name="RootGrid"/>
+        AllowsTransparency="False"
+        WindowStartupLocation="CenterScreen">
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="0" ResizeBorderThickness="4" GlassFrameThickness="0" />
+    </WindowChrome.WindowChrome>
+    <Grid x:Name="LayoutRoot">
+        <Grid x:Name="PaneGrid"/>
+        <Button x:Name="LoadFolderTempBtn"
+                Content="Choose folder…"
+                Width="160" Height="36"
+                VerticalAlignment="Center" HorizontalAlignment="Center"
+                Background="#202020" Foreground="White" BorderThickness="0"
+                Click="LoadFolderTempBtn_Click"/>
+    </Grid>
 </Window>
