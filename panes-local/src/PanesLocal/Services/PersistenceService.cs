@@ -48,8 +48,7 @@ public class PersistenceService
         var json = JsonSerializer.Serialize(state, _jsonOpts);
         var tmp = _path + ".tmp";
         await File.WriteAllTextAsync(tmp, json);
-        if (File.Exists(_path)) File.Delete(_path);
-        File.Move(tmp, _path);
+        File.Move(tmp, _path, overwrite: true);
     }
 
     public void SaveDebounced(AppState state)
