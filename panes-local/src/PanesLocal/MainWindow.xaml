@@ -1,0 +1,11 @@
+<Window x:Class="PanesLocal.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Panes Local"
+        Width="1280" Height="720"
+        Background="#000000"
+        WindowStyle="None"
+        ResizeMode="CanResize"
+        AllowsTransparency="False">
+    <Grid x:Name="RootGrid"/>
+</Window>
