@@ -59,6 +59,8 @@ public class FolderScanner
             if (!VideoExtensions.Contains(ext)) continue;
 
             long size = 0;
+            // Fallback to 0 if FileInfo throws (sharing violation, race delete, locked file).
+            // The file is still listed — better to queue and let the player decide than silently drop.
             try { size = new FileInfo(entry).Length; } catch { }
 
             results.Add(new VideoItem(entry, Path.GetFileName(entry), size));

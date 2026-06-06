@@ -80,13 +80,27 @@ public class FolderScannerTests : IDisposable
     }
 
     [Fact]
-    public async Task Scan_HonorsCancellation()
+    public async Task Scan_HonorsCancellationBeforeStart()
     {
         for (int i = 0; i < 100; i++) Touch($"v{i}.mp4");
         using var cts = new CancellationTokenSource();
         cts.Cancel();
 
         Func<Task> act = () => new FolderScanner().ScanAsync(_root, progress: null, ct: cts.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task Scan_HonorsCancellationDuringScan()
+    {
+        for (int i = 0; i < 2000; i++) Touch($"v{i}.mp4");
+        using var cts = new CancellationTokenSource();
+
+        var scan = new FolderScanner().ScanAsync(_root, progress: null, ct: cts.Token);
+        cts.CancelAfter(1);
+
+        Func<Task> act = () => scan;
 
         await act.Should().ThrowAsync<OperationCanceledException>();
     }
