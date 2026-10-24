@@ -26,6 +26,10 @@ UninstallDisplayIcon={app}\{#AppExe}
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"
 
+[InstallDelete]
+; Installers before 2026-10-24 also shipped 32-bit libVLC, which the 64-bit app never loads
+Type: filesandordirs; Name: "{app}\libvlc\win-x86"
+
 [Files]
 Source: "..\publish\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 

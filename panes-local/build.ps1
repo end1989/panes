@@ -11,7 +11,9 @@ try {
 
     # Short output folder on purpose: Inno Setup can't read paths over 260
     # characters, and libVLC's deepest files sit ~90 characters below it.
+    # Emptied first: publish doesn't delete files the app no longer ships.
     Write-Host "==> dotnet publish" -ForegroundColor Cyan
+    if (Test-Path publish) { Remove-Item publish -Recurse -Force }
     dotnet publish src/PanesLocal/PanesLocal.csproj `
         -c Release -r win-x64 --self-contained -o publish `
         --nologo --verbosity minimal
