@@ -1,0 +1,67 @@
+{
+  "name": "panes",
+  "version": "1.0.0",
+  "description": "Multi-stream video viewer — watch YouTube, Twitch, and more side by side",
+  "main": "main.js",
+  "author": "Panes",
+  "license": "MIT",
+  "homepage": "https://end1989.github.io/panes/",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist:nsis": "electron-builder --win nsis",
+    "dist:appx": "electron-builder --win appx"
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.0"
+  },
+  "dependencies": {
+    "electron-window-state": "^5.0.3"
+  },
+  "build": {
+    "appId": "com.panes.app",
+    "productName": "Panes",
+    "copyright": "Copyright (c) 2025 Panes",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "index.html",
+      "main.js",
+      "preload.js",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        },
+        {
+          "target": "appx",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true
+    },
+    "appx": {
+      "identityName": "Panes",
+      "publisherDisplayName": "Panes",
+      "displayName": "Panes",
+      "applicationId": "Panes",
+      "backgroundColor": "#000000",
+      "languages": ["en-US"],
+      "showNameOnTiles": true
+    }
+  }
+}

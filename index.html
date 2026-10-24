@@ -334,6 +334,76 @@
             font-style: italic;
         }
 
+        /* Zoom numeric input */
+        .zoom-input {
+            width: 56px;
+            padding: 3px 4px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #fff;
+            border-radius: 4px;
+            font-size: 12px;
+            outline: none;
+            text-align: right;
+            transition: border-color 0.2s;
+            flex-shrink: 0;
+        }
+        .zoom-input:focus { border-color: rgba(255, 255, 255, 0.3); }
+
+        /* Pan pad */
+        .pan-pad {
+            position: relative;
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 6px;
+            cursor: crosshair;
+            flex-shrink: 0;
+            touch-action: none;
+            overflow: hidden;
+        }
+        .pan-pad::before, .pan-pad::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.08);
+            pointer-events: none;
+        }
+        .pan-pad::before { left: 50%; top: 0; bottom: 0; width: 1px; }
+        .pan-pad::after { top: 50%; left: 0; right: 0; height: 1px; }
+        .pan-dot {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: #fff;
+            border-radius: 50%;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            box-shadow: 0 0 6px rgba(255,255,255,0.4);
+            transition: box-shadow 0.15s;
+        }
+        .pan-pad:hover .pan-dot { box-shadow: 0 0 10px rgba(255,255,255,0.7); }
+        .pan-reset {
+            width: 24px;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: rgba(255, 255, 255, 0.6);
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            line-height: 1;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: background 0.15s;
+        }
+        .pan-reset:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
+
         #panelFsBtn {
             width: 100%;
             padding: 8px;
@@ -395,8 +465,14 @@
         <!-- Zoom -->
         <div class="slider-row">
             <label>Zoom</label>
-            <input type="range" id="zoomSlider" min="100" max="300" value="200" step="10">
-            <span class="slider-value" id="zoomValue">200%</span>
+            <input type="range" id="zoomSlider" min="100" max="300" value="200" step="1">
+            <input type="number" id="zoomNum" class="zoom-input" min="100" max="300" value="200" step="1">
+        </div>
+        <!-- Pan -->
+        <div class="slider-row" style="margin-top:10px;">
+            <label>Pan</label>
+            <div class="pan-pad" id="panPad"><div class="pan-dot" id="panDot"></div></div>
+            <button class="pan-reset" onclick="setPan(0, 0)" title="Center">&#9678;</button>
         </div>
         <div class="panel-divider"></div>
 
@@ -406,6 +482,7 @@
     <script>
         let cols = 2, rows = 2;
         let currentScale = 200;
+        let panX = 0, panY = 0; // -1..1, viewfinder offset
         let panelOpen = false;
         let savedUrls = [];
 
@@ -442,6 +519,7 @@
 
             buildUrlRows();
             restoreUrls();
+            applyTransforms();
             saveState();
         }
 
@@ -498,6 +576,8 @@
             frame.style.display = 'block';
             frame.style.width = currentScale + '%';
             frame.style.height = currentScale + '%';
+            delete ytInfo[index];
+            ytSubscribe(index);
         }
 
         // --- Grid size ---
@@ -539,14 +619,27 @@
             let url = raw.startsWith('http') ? raw : 'https://' + raw;
             let m;
 
+            // YT JS API only works from a real http(s) origin; on file:// it can
+            // break the embed entirely, so omit the flag there.
+            const jsApi = location.protocol === 'http:' || location.protocol === 'https:';
+            const ytParams = (orig) => {
+                const parts = ['autoplay=1'];
+                if (jsApi) parts.push('enablejsapi=1');
+                const lm = orig.match(/[?&]list=([^&]+)/);
+                if (lm) parts.push('list=' + lm[1]);
+                return parts.join('&');
+            };
+
             if ((m = url.match(/youtube\.com\/watch\?.*v=([^&]+)/)))
-                return `https://www.youtube-nocookie.com/embed/${m[1]}?autoplay=1`;
+                return `https://www.youtube-nocookie.com/embed/${m[1]}?${ytParams(url)}`;
             if ((m = url.match(/youtu\.be\/([^?&]+)/)))
-                return `https://www.youtube-nocookie.com/embed/${m[1]}?autoplay=1`;
+                return `https://www.youtube-nocookie.com/embed/${m[1]}?${ytParams(url)}`;
             if ((m = url.match(/youtube\.com\/shorts\/([^?&]+)/)))
-                return `https://www.youtube-nocookie.com/embed/${m[1]}?autoplay=1`;
+                return `https://www.youtube-nocookie.com/embed/${m[1]}?${ytParams(url)}`;
             if ((m = url.match(/youtube\.com\/live\/([^?&]+)/)))
-                return `https://www.youtube-nocookie.com/embed/${m[1]}?autoplay=1`;
+                return `https://www.youtube-nocookie.com/embed/${m[1]}?${ytParams(url)}`;
+            if ((m = url.match(/youtube\.com\/playlist\?.*list=([^&]+)/)))
+                return `https://www.youtube-nocookie.com/embed/videoseries?list=${m[1]}&autoplay=1${jsApi ? '&enablejsapi=1' : ''}`;
 
             if ((m = url.match(/twitch\.tv\/videos\/(\d+)/)))
                 return `https://player.twitch.tv/?video=${m[1]}&parent=${location.hostname || 'localhost'}&autoplay=true`;
@@ -565,6 +658,83 @@
             return url;
         }
 
+        // --- YouTube postMessage control ---
+        // We talk to youtube-nocookie iframes directly via postMessage (no SDK).
+        // ytInfo[i] caches state pushed back by `infoDelivery` events so relative
+        // seek (J/L, arrows) can compute target = currentTime + delta.
+        const ytInfo = {}; // index -> { time, state }
+
+        function ytIsYoutube(frame) {
+            return !!frame && /youtube(-nocookie)?\.com/.test(frame.src || '');
+        }
+
+        function ytPost(frame, msg) {
+            if (!frame || !frame.contentWindow) return;
+            try { frame.contentWindow.postMessage(JSON.stringify(msg), '*'); } catch (e) {}
+        }
+
+        function ytCommand(index, func, args = []) {
+            const frame = document.getElementById(`frame-${index}`);
+            if (!ytIsYoutube(frame)) return;
+            ytPost(frame, { event: 'command', func, args });
+        }
+
+        function ytSubscribe(index) {
+            const frame = document.getElementById(`frame-${index}`);
+            if (!ytIsYoutube(frame)) return;
+            const send = () => {
+                ytPost(frame, { event: 'listening', id: `frame-${index}` });
+                ytPost(frame, { event: 'command', func: 'addEventListener', args: ['onStateChange'] });
+                ytPost(frame, { event: 'command', func: 'addEventListener', args: ['onReady'] });
+            };
+            send();
+            setTimeout(send, 800);
+            setTimeout(send, 2500);
+        }
+
+        window.addEventListener('message', (e) => {
+            if (typeof e.data !== 'string') return;
+            if (!e.origin || !/youtube/.test(e.origin)) return;
+            let data;
+            try { data = JSON.parse(e.data); } catch (err) { return; }
+            if (data.event !== 'infoDelivery' || !data.info) return;
+            const count = cellCount();
+            for (let i = 0; i < count; i++) {
+                const f = document.getElementById(`frame-${i}`);
+                if (f && f.contentWindow === e.source) {
+                    if (!ytInfo[i]) ytInfo[i] = {};
+                    if (typeof data.info.currentTime === 'number') ytInfo[i].time = data.info.currentTime;
+                    if (typeof data.info.playerState === 'number') ytInfo[i].state = data.info.playerState;
+                    return;
+                }
+            }
+        });
+
+        // Bulk actions across all YT cells
+        function vidToggleAll() {
+            const count = cellCount();
+            let anyPlaying = false;
+            for (let i = 0; i < count; i++) {
+                if (ytInfo[i] && ytInfo[i].state === 1) { anyPlaying = true; break; }
+            }
+            for (let i = 0; i < count; i++) {
+                ytCommand(i, anyPlaying ? 'pauseVideo' : 'playVideo');
+            }
+        }
+        function vidSeekAll(delta) {
+            const count = cellCount();
+            for (let i = 0; i < count; i++) {
+                const t = (ytInfo[i] && typeof ytInfo[i].time === 'number') ? ytInfo[i].time : 0;
+                ytCommand(i, 'seekTo', [Math.max(0, t + delta), true]);
+            }
+        }
+        function vidPlaylistAll(dir) {
+            const count = cellCount();
+            for (let i = 0; i < count; i++) {
+                ytCommand(i, dir > 0 ? 'nextVideo' : 'previousVideo');
+            }
+        }
+
         // --- Load video ---
 
         function loadVideo(index) {
@@ -577,14 +747,40 @@
             frame.style.display = 'block';
             frame.style.width = currentScale + '%';
             frame.style.height = currentScale + '%';
+            delete ytInfo[index];
+            ytSubscribe(index);
             saveState();
         }
 
-        // --- Zoom ---
+        // --- Zoom + Pan ---
+
+        function applyTransforms() {
+            // Iframe is currentScale% of cell, centered. Overhang on each side
+            // (in iframe-local %) is 50 * (zoom - 100) / zoom. Pan shifts the
+            // iframe opposite the viewfinder direction.
+            const overhang = currentScale > 100 ? 50 * (currentScale - 100) / currentScale : 0;
+            const offX = -panX * overhang;
+            const offY = -panY * overhang;
+            const tf = `translate(calc(-50% + ${offX}%), calc(-50% + ${offY}%))`;
+            const count = cellCount();
+            for (let i = 0; i < count; i++) {
+                const frame = document.getElementById(`frame-${i}`);
+                if (frame) frame.style.transform = tf;
+            }
+            const dot = document.getElementById('panDot');
+            if (dot) {
+                dot.style.left = (50 + panX * 50) + '%';
+                dot.style.top = (50 + panY * 50) + '%';
+            }
+        }
 
         function setZoom(value) {
+            value = Math.max(100, Math.min(300, parseInt(value) || 100));
             currentScale = value;
-            document.getElementById('zoomValue').textContent = value + '%';
+            const slider = document.getElementById('zoomSlider');
+            const num = document.getElementById('zoomNum');
+            if (document.activeElement !== slider) slider.value = value;
+            if (document.activeElement !== num) num.value = value;
             const count = cellCount();
             for (let i = 0; i < count; i++) {
                 const frame = document.getElementById(`frame-${i}`);
@@ -593,18 +789,56 @@
                     frame.style.height = value + '%';
                 }
             }
+            applyTransforms();
+            saveState();
+        }
+
+        function setPan(x, y) {
+            panX = Math.max(-1, Math.min(1, x));
+            panY = Math.max(-1, Math.min(1, y));
+            applyTransforms();
             saveState();
         }
 
         document.getElementById('zoomSlider').addEventListener('input', (e) => {
             setZoom(parseInt(e.target.value));
         });
+        document.getElementById('zoomNum').addEventListener('input', (e) => {
+            setZoom(e.target.value);
+        });
+
+        // Pan pad drag
+        (function () {
+            const pad = document.getElementById('panPad');
+            let dragging = false;
+            function norm(e) {
+                const r = pad.getBoundingClientRect();
+                const x = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+                const y = Math.max(0, Math.min(1, (e.clientY - r.top) / r.height));
+                return { x: x * 2 - 1, y: y * 2 - 1 };
+            }
+            pad.addEventListener('pointerdown', (e) => {
+                dragging = true;
+                pad.setPointerCapture(e.pointerId);
+                const { x, y } = norm(e);
+                setPan(x, y);
+            });
+            pad.addEventListener('pointermove', (e) => {
+                if (!dragging) return;
+                const { x, y } = norm(e);
+                setPan(x, y);
+            });
+            const stop = () => { dragging = false; };
+            pad.addEventListener('pointerup', stop);
+            pad.addEventListener('pointercancel', stop);
+            pad.addEventListener('dblclick', () => setPan(0, 0));
+        })();
 
         // --- Persistence ---
 
         function saveState() {
             const urls = collectUrls();
-            localStorage.setItem('borderlessGrid', JSON.stringify({ cols, rows, urls, zoom: currentScale }));
+            localStorage.setItem('borderlessGrid', JSON.stringify({ cols, rows, urls, zoom: currentScale, panX, panY }));
         }
 
         function loadState() {
@@ -615,8 +849,10 @@
                     rows = Math.max(1, Math.min(6, data.rows || 2));
                     savedUrls = data.urls || [];
                     currentScale = data.zoom || 200;
+                    panX = Math.max(-1, Math.min(1, data.panX || 0));
+                    panY = Math.max(-1, Math.min(1, data.panY || 0));
                     document.getElementById('zoomSlider').value = currentScale;
-                    document.getElementById('zoomValue').textContent = currentScale + '%';
+                    document.getElementById('zoomNum').value = currentScale;
                 }
             } catch (e) {}
         }
@@ -643,7 +879,9 @@
                 cols,
                 rows,
                 urls: collectUrls(),
-                zoom: currentScale
+                zoom: currentScale,
+                panX,
+                panY
             });
             savePresets(presets);
             nameEl.value = '';
@@ -658,9 +896,11 @@
             cols = Math.max(1, Math.min(6, p.cols || 2));
             rows = Math.max(1, Math.min(6, p.rows || 2));
             currentScale = p.zoom || 200;
+            panX = Math.max(-1, Math.min(1, p.panX || 0));
+            panY = Math.max(-1, Math.min(1, p.panY || 0));
 
             document.getElementById('zoomSlider').value = currentScale;
-            document.getElementById('zoomValue').textContent = currentScale + '%';
+            document.getElementById('zoomNum').value = currentScale;
             buildGrid(p.urls || []);
         }
 
@@ -713,6 +953,30 @@
                     break;
                 case 'm': case 'M':
                     togglePanel();
+                    break;
+                case ' ': case 'k': case 'K':
+                    e.preventDefault();
+                    vidToggleAll();
+                    break;
+                case 'ArrowLeft':
+                    e.preventDefault();
+                    vidSeekAll(-5);
+                    break;
+                case 'ArrowRight':
+                    e.preventDefault();
+                    vidSeekAll(5);
+                    break;
+                case 'j': case 'J':
+                    vidSeekAll(-10);
+                    break;
+                case 'l': case 'L':
+                    vidSeekAll(10);
+                    break;
+                case '[':
+                    vidPlaylistAll(-1);
+                    break;
+                case ']':
+                    vidPlaylistAll(1);
                     break;
                 case 'Escape':
                     if (panelOpen) {
