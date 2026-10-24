@@ -232,7 +232,7 @@ Run these from the `panes-local` folder.
    ./build.ps1
    ```
 
-   It runs the tests, publishes the app, and creates `dist\PanesLocal-Setup.exe`.
+   It runs the tests, publishes the app, and creates `dist\PanesLocal-Setup.exe`. If any step fails, it stops with an error.
 5. Close Panes Local (`Alt+F4`), then run the installer. It installs over the old version for your user only, and keeps your saved session. For a silent install:
 
    ```powershell
@@ -268,6 +268,8 @@ Reinstalling or updating keeps these. Uninstall either app from **Settings → A
 **Panes Local says "Could not restore last session — starting fresh."** Its saved session file couldn't be read, so it started with defaults. Choose your folder again.
 
 **Panes Local shows a libVLC error on startup.** Its video engine didn't load. Reinstall Panes Local.
+
+**Building the Panes Local installer fails with "The system cannot find the path specified."** The repo's folder path is too long: Inno Setup can't read files past Windows' 260-character path limit. Move the repo to a folder whose path is under about 135 characters.
 
 ## License
 
