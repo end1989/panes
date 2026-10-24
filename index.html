@@ -490,12 +490,14 @@
 
         // --- Build / rebuild ---
 
-        function buildGrid() {
+        // urls: what each cell shows. Defaults to the URLs in the fields (grid
+        // resize); on first load the fields don't exist yet, so callers pass the
+        // URLs loadState() restored, or a preset's URLs.
+        function buildGrid(urls = collectUrls()) {
             const grid = document.getElementById('grid');
             const count = cellCount();
 
-            // Collect current URLs before destroying DOM
-            savedUrls = collectUrls();
+            savedUrls = urls;
 
             grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
             grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
@@ -899,22 +901,7 @@
 
             document.getElementById('zoomSlider').value = currentScale;
             document.getElementById('zoomNum').value = currentScale;
-
-            // Set savedUrls after buildGrid's collectUrls() by passing them through
-            // buildGrid() calls collectUrls() which would overwrite savedUrls,
-            // so we set them after the grid HTML is rebuilt but before restoreUrls()
-            buildGrid();
-            // buildGrid already restored empty savedUrls, now reload with preset URLs
-            const presetUrls = p.urls || [];
-            const count = cellCount();
-            for (let i = 0; i < count; i++) {
-                const el = document.getElementById(`url-${i}`);
-                if (el && presetUrls[i]) {
-                    el.value = presetUrls[i];
-                    loadVideoSilent(i, presetUrls[i]);
-                }
-            }
-            saveState();
+            buildGrid(p.urls || []);
         }
 
         function deletePreset(index) {
@@ -1031,7 +1018,7 @@
 
         // --- Init ---
         loadState();
-        buildGrid();
+        buildGrid(savedUrls);
         renderPresets();
         setTimeout(() => togglePanel(true), 400);
     </script>
