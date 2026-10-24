@@ -413,12 +413,14 @@
 
         // --- Build / rebuild ---
 
-        function buildGrid() {
+        // urls: what each cell shows. Defaults to the URLs in the fields (grid
+        // resize); on first load the fields don't exist yet, so callers pass the
+        // URLs loadState() restored, or a preset's URLs.
+        function buildGrid(urls = collectUrls()) {
             const grid = document.getElementById('grid');
             const count = cellCount();
 
-            // Collect current URLs before destroying DOM
-            savedUrls = collectUrls();
+            savedUrls = urls;
 
             grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
             grid.style.gridTemplateRows = `repeat(${rows}, 1fr)`;
@@ -591,6 +593,7 @@
                     frame.style.height = value + '%';
                 }
             }
+            saveState();
         }
 
         document.getElementById('zoomSlider').addEventListener('input', (e) => {
@@ -655,11 +658,10 @@
             cols = Math.max(1, Math.min(6, p.cols || 2));
             rows = Math.max(1, Math.min(6, p.rows || 2));
             currentScale = p.zoom || 200;
-            savedUrls = p.urls || [];
 
             document.getElementById('zoomSlider').value = currentScale;
             document.getElementById('zoomValue').textContent = currentScale + '%';
-            buildGrid();
+            buildGrid(p.urls || []);
         }
 
         function deletePreset(index) {
@@ -752,7 +754,7 @@
 
         // --- Init ---
         loadState();
-        buildGrid();
+        buildGrid(savedUrls);
         renderPresets();
         setTimeout(() => togglePanel(true), 400);
     </script>
