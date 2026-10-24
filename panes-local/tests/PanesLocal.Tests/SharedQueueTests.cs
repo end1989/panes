@@ -167,6 +167,20 @@ public class SharedQueueTests
     }
 
     [Fact]
+    public void Move_ReordersItems_AndRaisesChangedSoTheNewOrderIsSaved()
+    {
+        var q = new SharedQueue();
+        q.AddAll(new[] { V("a.mp4"), V("b.mp4"), V("c.mp4") });
+        var changed = 0;
+        q.Changed += () => changed++;
+
+        q.Move(0, 2);   // drag a onto c
+
+        q.Items.Select(i => i.FilePath).Should().Equal("b.mp4", "c.mp4", "a.mp4");
+        changed.Should().Be(1);
+    }
+
+    [Fact]
     public void Clear_EmptiesAllThreeCollections()
     {
         var q = new SharedQueue();

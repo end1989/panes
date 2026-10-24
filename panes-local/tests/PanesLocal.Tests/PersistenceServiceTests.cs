@@ -21,7 +21,7 @@ public class PersistenceServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SaveAndLoad_RoundTripsAllFields()
+    public void SaveAndLoad_RoundTripsAllFields()
     {
         var svc = new PersistenceService(_statePath);
         var state = new AppState
@@ -37,7 +37,7 @@ public class PersistenceServiceTests : IDisposable
             Panes = new() { new PaneState(0, @"D:\Videos\b.mp4", 42.5) }
         };
 
-        await svc.SaveImmediateAsync(state);
+        svc.SaveImmediate(state);
         var loaded = svc.Load();
 
         loaded.Grid.Cols.Should().Be(3);
@@ -74,14 +74,49 @@ public class PersistenceServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SaveImmediate_WritesAtomically_NoLeftoverTmp()
+    public void SaveImmediate_WritesAtomically_NoLeftoverTmp()
     {
         var svc = new PersistenceService(_statePath);
 
-        await svc.SaveImmediateAsync(new AppState());
+        svc.SaveImmediate(new AppState());
 
         File.Exists(_statePath).Should().BeTrue();
         File.Exists(_statePath + ".tmp").Should().BeFalse();
+    }
+
+    [Fact]
+    public void SaveImmediate_IsOnDiskWhenItReturns()
+    {
+        var svc = new PersistenceService(_statePath);
+
+        svc.SaveImmediate(new AppState { Zoom = 175 });
+
+        svc.Load().Zoom.Should().Be(175);
+    }
+
+    [Fact]
+    public async Task SaveImmediate_IsNotOverwrittenByAnOlderPendingDebouncedSave()
+    {
+        var svc = new PersistenceService(_statePath, debounceMs: 100);
+
+        svc.SaveDebounced(new AppState { Zoom = 150 });   // still waiting out its debounce
+        svc.SaveImmediate(new AppState { Zoom = 250 });   // the final save on close
+        await Task.Delay(400);
+
+        svc.Load().Zoom.Should().Be(250);
+    }
+
+    [Fact]
+    public async Task Delete_RemovesState_AndDropsAPendingDebouncedSave()
+    {
+        var svc = new PersistenceService(_statePath, debounceMs: 100);
+        svc.SaveImmediate(new AppState { Zoom = 150 });
+        svc.SaveDebounced(new AppState { Zoom = 250 });   // would bring the state back after a reset
+
+        svc.Delete();
+        await Task.Delay(400);
+
+        File.Exists(_statePath).Should().BeFalse();
     }
 
     [Fact]

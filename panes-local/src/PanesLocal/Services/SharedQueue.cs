@@ -89,6 +89,13 @@ public class SharedQueue
         NotifyChanged();
     }
 
+    public void Move(int from, int to)
+    {
+        if (from < 0 || from >= Items.Count || to < 0 || to >= Items.Count || from == to) return;
+        Items.Move(from, to);
+        NotifyChanged();
+    }
+
     public void Shuffle()
     {
         var rng = Random.Shared;

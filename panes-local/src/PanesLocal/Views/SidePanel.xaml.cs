@@ -180,7 +180,7 @@ public partial class SidePanel : UserControl
             int from = Queue.Items.IndexOf(dragged);
             int to   = Queue.Items.IndexOf(target);
             if (from < 0 || to < 0) return;
-            Queue.Items.Move(from, to);
+            Queue.Move(from, to);
             return;
         }
 

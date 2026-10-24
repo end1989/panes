@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Shell;
 using System.Windows.Threading;
 using PanesLocal.Models;
 using PanesLocal.Services;
@@ -30,7 +31,14 @@ public partial class MainWindow : Window
     private bool _draggingPanel;
     private Point _dragStartPos;
     private readonly PersistenceService _persistence = new(App.StateFilePath);
-    private AppState _state = new();
+    private readonly AppState _saved;          // last session as loaded; restored from, never written to
+    private readonly List<string> _folders;
+    private bool _restoring;                   // saved session not back on the panes/queue yet
+    private bool _saveQueued;
+    private bool _closing;
+    private readonly WindowChrome _chrome;
+    private bool _fullscreen;
+    private bool _maximizedBeforeFullscreen;
 
     public MainWindow()
     {
@@ -49,23 +57,25 @@ public partial class MainWindow : Window
         _panelTimer.Tick += (_, _) => UpdatePanelState();
         _panelTimer.Start();
 
-        _state = _persistence.Load();
-        _cols = _state.Grid.Cols;
-        _rows = _state.Grid.Rows;
-        _zoom = _state.Zoom;
-        _shuffleOn = _state.Transport.Shuffle;
-        _repeatAllOn = _state.Transport.RepeatAll;
-        _dock = _state.Panel.Dock;
-        Width  = _state.Window.Width;
-        Height = _state.Window.Height;
-        Left   = _state.Window.X;
-        Top    = _state.Window.Y;
-        if (_state.Window.Maximized) WindowState = WindowState.Maximized;
+        _saved = _persistence.Load();
+        _folders = _saved.Folders.ToList();
+        _cols = _saved.Grid.Cols;
+        _rows = _saved.Grid.Rows;
+        _zoom = _saved.Zoom;
+        _shuffleOn = _saved.Transport.Shuffle;
+        _repeatAllOn = _saved.Transport.RepeatAll;
+        _dock = _saved.Panel.Dock;
+        _chrome = WindowChrome.GetWindowChrome(this);
+        RestoreWindowPlacement(_saved.Window);
 
-        // Restore queue: rescan folders + filter saved paths
-        if (_state.Folders.Count > 0)
+        // Restore queue: rescan folders + filter saved paths, once the panes'
+        // video surfaces exist. Nothing is saved until then, so an early save
+        // can't overwrite the session on disk with the still-empty queue.
+        if (_folders.Count > 0)
         {
-            _ = RestoreSessionAsync();
+            _restoring = true;
+            Panel.SetFolderName(System.IO.Path.GetFileName(_folders[0]));
+            Loaded += (_, _) => _ = RestoreSessionAsync();
         }
 
         Panel.Attach(_queue, _audio);
@@ -76,8 +86,8 @@ public partial class MainWindow : Window
 
         Panel.GridSizeChanged += (c, r) => { _cols = c; _rows = r; BuildGrid(); SaveState(); };
         Panel.ZoomChanged += z => { _zoom = z; ApplyZoom(); SaveState(); };
-        Panel.FolderChosen += async p => { _state.Folders.Clear(); _state.Folders.Add(p); await LoadFolderAsync(p, true); SaveState(); };
-        Panel.FolderAdded  += async p => { if (!_state.Folders.Contains(p)) _state.Folders.Add(p); await LoadFolderAsync(p, false); SaveState(); };
+        Panel.FolderChosen += async p => { _folders.Clear(); _folders.Add(p); await LoadFolderAsync(p, true); SaveState(); };
+        Panel.FolderAdded  += async p => { if (!_folders.Contains(p)) _folders.Add(p); await LoadFolderAsync(p, false); SaveState(); };
         Panel.QueueCleared += () => { _queue.Clear(); foreach (var pn in _panes) pn.StopAndBlank(); SaveState(); };
         Panel.ShuffleToggled += on => { _shuffleOn = on; SaveState(); };
         Panel.RepeatAllToggled += on => { _repeatAllOn = on; SaveState(); };
@@ -85,7 +95,8 @@ public partial class MainWindow : Window
         Panel.PaneDroppedOnPlaylist += OnPaneDroppedOnPlaylist;
         Panel.ResetRequested += () =>
         {
-            if (File.Exists(App.StateFilePath)) File.Delete(App.StateFilePath);
+            _closing = true;   // the close-save would otherwise write the state straight back
+            _persistence.Delete();
             System.Diagnostics.Process.Start(System.Diagnostics.Process.GetCurrentProcess().MainModule!.FileName!);
             Application.Current.Shutdown();
         };
@@ -152,80 +163,140 @@ public partial class MainWindow : Window
 
     private async Task RestoreSessionAsync()
     {
-        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var folder in _state.Folders)
+        try
         {
-            try
+            var onDisk = new List<VideoItem>();
+            foreach (var folder in _folders)
             {
-                var items = await _scanner.ScanAsync(folder, progress: null, CancellationToken.None);
-                foreach (var i in items) existing.Add(i.FilePath);
+                try { onDisk.AddRange(await _scanner.ScanAsync(folder, progress: null, CancellationToken.None)); }
+                catch { /* folder missing → skip */ }
             }
-            catch { /* folder missing → skip */ }
+            var existing = new Dictionary<string, VideoItem>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in onDisk) existing.TryAdd(item.FilePath, item);
+
+            // Saved queue (in the user's order) and played list, minus files that are gone
+            foreach (var path in _saved.Queue)
+                if (existing.TryGetValue(path, out var item)) _queue.Items.Add(item);
+            foreach (var path in _saved.Played)
+                if (existing.TryGetValue(path, out var item)) _queue.Played[item.FilePath] = item;
+
+            // Restore per-pane current video at saved position
+            foreach (var ps in _saved.Panes)
+            {
+                if (ps.FilePath is null || !existing.TryGetValue(ps.FilePath, out var item)) continue;
+                if (ps.Index < 0 || ps.Index >= _panes.Count) continue;
+                _queue.Remove(item);
+                _queue.MarkInFlight(item);
+                _panes[ps.Index].Play(item, ps.PositionSeconds);
+                await Task.Delay(150);   // same stagger as FillIdlePanesFromQueue
+            }
+
+            // Newly discovered files go after the saved queue — shuffled among
+            // themselves if shuffle is on, so the saved order isn't reshuffled
+            var fresh = onDisk.ToArray();
+            if (_shuffleOn) Random.Shared.Shuffle(fresh);
+            _queue.AddAll(fresh);   // skips anything already queued, playing or played
+
+            if (_saved.Audio.UnmutedPaneIndex is int u && u < _panes.Count) _audio.UnmutePane(u);
         }
-        // Items the saved queue still finds on disk, in order
-        foreach (var path in _state.Queue.Where(existing.Contains))
-            _queue.Items.Add(new VideoItem(path, System.IO.Path.GetFileName(path), 0));
-        // Played list — keep filtered
-        foreach (var path in _state.Played.Where(existing.Contains))
-            _queue.Played[path] = new VideoItem(path, System.IO.Path.GetFileName(path), 0);
-        // Newly discovered files: append
-        var known = new HashSet<string>(_queue.Items.Select(i => i.FilePath));
-        foreach (var p in _queue.InFlight) known.Add(p);
-        foreach (var p in _queue.Played.Keys) known.Add(p);
-        foreach (var path in existing.Where(p => !known.Contains(p)))
-            _queue.Items.Add(new VideoItem(path, System.IO.Path.GetFileName(path), 0));
-
-        if (_shuffleOn) _queue.Shuffle();
-
-        // Restore per-pane current video at saved position
-        foreach (var ps in _state.Panes)
+        finally
         {
-            if (ps.FilePath is null) continue;
-            if (!existing.Contains(ps.FilePath)) continue;
-            if (ps.Index < 0 || ps.Index >= _panes.Count) continue;
-            var v = new VideoItem(ps.FilePath, System.IO.Path.GetFileName(ps.FilePath), 0);
-            _queue.Remove(v);
-            _queue.MarkInFlight(v);
-            _panes[ps.Index].Play(v, ps.PositionSeconds);
+            _restoring = false;
         }
-
-        if (_state.Audio.UnmutedPaneIndex is int u) _audio.UnmutePane(u);
         FillIdlePanesFromQueue();
+        SaveState();
     }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        SaveStateSync();
+        // Synchronous: an async write here can lose the race with process exit.
+        // Skipped mid-restore so the session on disk survives an early close.
+        if (_restoring || _closing) return;
+        _closing = true;
+        _persistence.SaveImmediate(BuildSnapshot());
     }
 
     private void SaveState()
     {
-        SyncStateFromUi();
-        _persistence.SaveDebounced(_state);
-    }
-
-    private void SaveStateSync()
-    {
-        SyncStateFromUi();
-        _ = _persistence.SaveImmediateAsync(_state);
-    }
-
-    private void SyncStateFromUi()
-    {
-        _state.Window = new AppState.WindowState
+        if (_restoring || _closing || _saveQueued) return;
+        // Snapshot once the current operation has finished — the queue signals a
+        // change (e.g. TakeNext) before the pane has actually started the video.
+        _saveQueued = true;
+        Dispatcher.InvokeAsync(() =>
         {
-            X = Left, Y = Top, Width = Width, Height = Height,
-            Maximized = WindowState == WindowState.Maximized,
-            Fullscreen = false
+            _saveQueued = false;
+            // Re-checked here: a save queued during startup (e.g. restoring fullscreen)
+            // runs after the restore has begun.
+            if (!_restoring && !_closing) _persistence.SaveDebounced(BuildSnapshot());
+        }, DispatcherPriority.Background);
+    }
+
+    private AppState BuildSnapshot()
+    {
+        // Normal-state bounds even while maximized or fullscreen, so leaving
+        // either after a relaunch puts the window back where it was.
+        var bounds = WindowState == WindowState.Normal && !_fullscreen
+            ? new Rect(Left, Top, Width, Height)
+            : RestoreBounds;
+        return new AppState
+        {
+            Window = new AppState.WindowState
+            {
+                X = bounds.X, Y = bounds.Y, Width = bounds.Width, Height = bounds.Height,
+                Maximized = _fullscreen ? _maximizedBeforeFullscreen : WindowState == WindowState.Maximized,
+                Fullscreen = _fullscreen
+            },
+            Grid = new AppState.GridState { Cols = _cols, Rows = _rows },
+            Zoom = _zoom,
+            Panel = new AppState.PanelState { Dock = _dock, Size = PanelWidth },
+            Transport = new AppState.TransportState { Shuffle = _shuffleOn, RepeatAll = _repeatAllOn },
+            Audio = new AppState.AudioState { UnmutedPaneIndex = _audio.UnmutedPaneIndex },
+            Folders = _folders.ToList(),
+            Queue = _queue.Items.Select(i => i.FilePath).ToList(),
+            Played = _queue.Played.Keys.ToList(),
+            Panes = _panes.Select(p => new PaneState(p.PaneIndex, p.Current?.FilePath, p.CurrentPositionSeconds)).ToList()
         };
-        _state.Grid = new AppState.GridState { Cols = _cols, Rows = _rows };
-        _state.Zoom = _zoom;
-        _state.Panel = new AppState.PanelState { Dock = _dock, Size = PanelWidth };
-        _state.Transport = new AppState.TransportState { Shuffle = _shuffleOn, RepeatAll = _repeatAllOn };
-        _state.Audio = new AppState.AudioState { UnmutedPaneIndex = _audio.UnmutedPaneIndex };
-        _state.Queue = _queue.Items.Select(i => i.FilePath).ToList();
-        _state.Played = _queue.Played.Keys.ToList();
-        _state.Panes = _panes.Select(p => new PaneState(p.PaneIndex, p.Current?.FilePath, p.CurrentPositionSeconds)).ToList();
+    }
+
+    private void RestoreWindowPlacement(AppState.WindowState w)
+    {
+        // Saved bounds are the normal (un-maximized) ones. Reuse them only if they
+        // still fit on screen; otherwise keep the XAML default size, centered.
+        var screen = new Rect(SystemParameters.VirtualScreenLeft, SystemParameters.VirtualScreenTop,
+                              SystemParameters.VirtualScreenWidth, SystemParameters.VirtualScreenHeight);
+        var bounds = new Rect(w.X, w.Y, w.Width, w.Height);
+        if (screen.Contains(bounds))
+        {
+            WindowStartupLocation = WindowStartupLocation.Manual;
+            Left = bounds.X; Top = bounds.Y; Width = bounds.Width; Height = bounds.Height;
+        }
+        if (w.Maximized) WindowState = WindowState.Maximized;
+        if (w.Fullscreen) SetFullscreen(true);
+    }
+
+    // WindowChrome clips a maximized window to the work area (the screen minus
+    // the taskbar), so fullscreen drops the chrome and the resize frame — a
+    // maximized window without them covers the whole monitor.
+    private void SetFullscreen(bool on)
+    {
+        if (on == _fullscreen) return;
+        _fullscreen = on;
+        if (on)
+        {
+            _maximizedBeforeFullscreen = WindowState == WindowState.Maximized;
+            WindowChrome.SetWindowChrome(this, null);
+            ResizeMode = ResizeMode.NoResize;
+            WindowState = WindowState.Normal;   // re-maximize so the new style takes effect
+            WindowState = WindowState.Maximized;
+        }
+        else
+        {
+            WindowState = WindowState.Normal;
+            ResizeMode = ResizeMode.CanResize;
+            WindowChrome.SetWindowChrome(this, _chrome);
+            if (_maximizedBeforeFullscreen) WindowState = WindowState.Maximized;
+        }
+        SaveState();
     }
 
     private void OnMouseMove(object sender, MouseEventArgs e)
@@ -428,6 +499,7 @@ public partial class MainWindow : Window
                 pane.RequestMute   += p => _audio.MutePane(p.PaneIndex);
                 pane.PlaylistItemDroppedOnMe += OnPlaylistDroppedOnPane;
                 pane.PaneDroppedOnMe += OnPaneDroppedOnPane;
+                pane.VideoStarted += (_, _) => RefreshPaneSlots();   // queue.Changed fires before the pane has the video
                 Grid.SetColumn(pane, c);
                 Grid.SetRow(pane, r);
                 PaneGrid.Children.Add(pane);
@@ -491,7 +563,7 @@ public partial class MainWindow : Window
         switch (e.Key)
         {
             case Key.F11:
-                WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+                SetFullscreen(!_fullscreen);
                 break;
             case Key.Escape:
                 if (_panelOpen) ClosePanel();
